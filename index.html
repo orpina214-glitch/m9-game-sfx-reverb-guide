@@ -1,0 +1,1145 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>게임 SFX 공간 리버브</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: 임펄스 응답(직접음→초기반사→잔향)을 그린 밤색 배너 사이에 위키 2단. 색은 의미가 있음 — 잉크=직접음, 앰버=초기반사, 블루=잔향 */
+:root{
+  --bg:#eef1f5; --surface:#fbfcfd; --ink:#141b26; --muted:#566273; --line:#cdd5e0;
+  --band:#0f1828; --band-ink:#eef3fa; --band-dim:#8a9ab0;
+  --er:#b4620f; --er-soft:#f6e6d3; --tail:#2c66b8; --tail-soft:#dbe6f6;
+  --warn:#7d5300; --warn-soft:#fbefd0; --ok:#1f7a4d; --ok-soft:#dcefe4;
+  --key:#ffffff; --key-edge:#b5bfcc; --mark:#fff1a8;
+  --f-display:"Black Han Sans","IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --f-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
+  --side-w:300px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0c111a; --surface:#131b28; --ink:#e1e7f0; --muted:#94a1b4; --line:#253246;
+  --band:#070b13; --band-ink:#eef3fa; --band-dim:#7f8ea5;
+  --er:#f0a050; --er-soft:#36260f; --tail:#6ea3f0; --tail-soft:#15243c;
+  --warn:#f0c264; --warn-soft:#32280f; --ok:#5fd09a; --ok-soft:#10301f;
+  --key:#1b2535; --key-edge:#05080e; --mark:#5b4a10;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0c111a; --surface:#131b28; --ink:#e1e7f0; --muted:#94a1b4; --line:#253246;
+  --band:#070b13; --band-ink:#eef3fa; --band-dim:#7f8ea5;
+  --er:#f0a050; --er-soft:#36260f; --tail:#6ea3f0; --tail-soft:#15243c;
+  --warn:#f0c264; --warn-soft:#32280f; --ok:#5fd09a; --ok-soft:#10301f;
+  --key:#1b2535; --key-edge:#05080e; --mark:#5b4a10;
+  color-scheme:dark}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:64px}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.75;word-break:keep-all;overflow-wrap:anywhere}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--tail);outline-offset:2px;border-radius:4px}
+
+/* 배너 */
+.banner{background:var(--band);color:var(--band-ink)}
+.banner-in{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 22px;display:grid;gap:14px}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--band-dim)}
+.banner h1,.banner .foot-title{font-family:var(--f-display);font-weight:400;font-size:clamp(30px,7.2vw,76px);line-height:1.08;margin:0;text-wrap:balance;letter-spacing:-.01em}
+.banner .acc{color:#6ea3f0}
+.banner .sub{font-size:clamp(15px,2.2vw,19px);opacity:.92;margin:0}
+.irbars{display:flex;align-items:flex-end;gap:2px;height:64px;border-bottom:1px solid #2a3a55}
+.irbars i{flex:1;min-width:0;border-radius:1px 1px 0 0;background:#3c6fb8}
+.irbars i.d{background:#eef3fa} .irbars i.e{background:#e09040}
+.irlegend{display:flex;flex-wrap:wrap;gap:4px 18px;font-family:var(--f-mono);font-size:12px;color:var(--band-dim)}
+.irlegend b{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.meta{display:flex;flex-wrap:wrap;gap:6px 18px;font-family:var(--f-mono);font-size:12.5px;color:var(--band-dim)}
+.meta b{color:var(--band-ink);font-weight:600}
+
+/* 모바일 바 */
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+.mbar{display:none;position:sticky;top:env(safe-area-inset-top,0px);z-index:30;background:var(--surface);border-bottom:1px solid var(--line)}
+.mbar-in{padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px));padding-block:8px;display:flex;align-items:center;gap:10px}
+.mbar .title{font-weight:700;font-size:14px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+button{font:inherit;color:inherit;cursor:pointer}
+.btn{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:6px 12px;font-size:14px;font-weight:500;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+
+/* 셸 */
+.shell{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;grid-template-columns:var(--side-w) minmax(0,1fr);gap:40px;align-items:start}
+.side{position:sticky;top:0;max-height:100vh;overflow:auto;padding-block:24px 40px;display:grid;gap:14px;align-content:start}
+.side-head{display:grid;gap:10px}
+.search{position:relative}
+.search input{width:100%;font:inherit;font-size:15px;padding:10px 36px 10px 12px;border:1.5px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink)}
+.search input:focus{outline:none;border-color:var(--tail)}
+.search .clr{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:transparent;font-size:18px;color:var(--muted);padding:2px 8px}
+.side-row{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12.5px;color:var(--muted)}
+.hint{font-size:12.5px;color:var(--muted);margin:0}
+.toc{list-style:none;margin:0;padding:0;font-size:14px;line-height:1.45}
+.toc .part{margin-top:14px;padding:6px 0 4px;font-weight:700;font-size:13px;border-top:1px solid var(--line)}
+.toc .part:first-child{margin-top:0}
+.toc .part a{padding:0;color:inherit}
+.toc a{display:flex;gap:8px;padding:5px 8px;border-radius:6px;text-decoration:none;color:var(--ink)}
+.toc a .n{font-family:var(--f-mono);font-size:12px;color:var(--muted);min-width:2.6em;padding-top:1px}
+.toc a:hover{background:var(--surface)}
+.toc a.on{background:var(--surface);box-shadow:inset 2px 0 0 var(--ink);font-weight:500}
+.results{display:grid;gap:4px}
+.results .cnt{font-size:12.5px;color:var(--muted);margin-bottom:4px}
+.res{display:block;text-align:left;border:1px solid transparent;background:transparent;border-radius:8px;padding:8px 10px;width:100%}
+.res:hover,.res:focus-visible{background:var(--surface);border-color:var(--line)}
+.res .rt{font-weight:500;font-size:14px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.res .rp{font-size:11px;font-family:var(--f-mono);padding:0 6px;border-radius:4px;background:var(--bg);border:1px solid var(--line);color:var(--muted)}
+.res .rs{font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:2px}
+.res mark{background:var(--mark);color:inherit;border-radius:2px}
+.empty{font-size:14px;color:var(--muted);padding:8px}
+
+main{padding-block:28px 64px;min-width:0;max-width:840px}
+.part-head{margin:56px 0 8px;padding:22px 22px 20px;border-radius:14px;display:grid;gap:6px;background:var(--surface);border:1px solid var(--line)}
+.part-head:first-child{margin-top:0}
+.part-head .tag{font-family:var(--f-mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.part-head h2{font-family:var(--f-display);font-weight:400;font-size:clamp(26px,4vw,36px);line-height:1.2;margin:0;text-wrap:balance}
+.part-head p{margin:0;max-width:62ch}
+.part-head.cases{background:var(--tail-soft);border-color:transparent}
+
+.sec{padding-top:34px}
+.sec h3{font-size:clamp(19px,2.6vw,22px);line-height:1.4;margin:0 0 10px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;text-wrap:balance}
+.sec h3 .n{font-family:var(--f-mono);font-size:14px;font-weight:600;color:var(--muted)}
+.sec h3 .yr{font-family:var(--f-mono);font-size:13px;font-weight:400;color:var(--muted)}
+.sec p{margin:0 0 12px;max-width:68ch}
+.sec ul,.sec ol{margin:0 0 14px;padding-left:1.25em;max-width:68ch}
+.sec li{margin:3px 0}
+.sec h4{font-size:15.5px;margin:18px 0 6px}
+.flash{animation:flash 1.6s ease-out}
+@keyframes flash{0%{background:var(--mark)}100%{background:transparent}}
+
+.c-d{font-weight:700}
+.c-er{color:var(--er);font-weight:700}
+.c-tail{color:var(--tail);font-weight:700}
+.unsure{display:inline-block;font-size:12px;font-weight:700;padding:1px 7px;border-radius:5px;background:var(--warn-soft);color:var(--warn);vertical-align:1px;white-space:nowrap}
+.guess{display:inline-block;font-size:12px;font-weight:700;padding:1px 7px;border-radius:5px;background:var(--bg);border:1px dashed var(--muted);color:var(--muted);vertical-align:1px;white-space:nowrap}
+.tag-m{display:inline-block;font-family:var(--f-mono);font-size:11.5px;font-weight:600;padding:1px 7px;border-radius:5px;border:1px solid var(--line);background:var(--surface);color:var(--muted);vertical-align:2px;white-space:nowrap}
+
+.note{border-radius:10px;padding:12px 14px;margin:0 0 14px;font-size:15px;max-width:68ch;background:var(--surface);border:1px solid var(--line)}
+.note b.lb{display:block;font-size:13px;margin-bottom:2px}
+.note.game{border-left:3px solid var(--tail);border-radius:4px 10px 10px 4px}
+.note.game b.lb{color:var(--tail)}
+.note.tip b.lb{color:var(--ok)}
+.note.warn{background:var(--warn-soft);border-color:transparent} .note.warn b.lb{color:var(--warn)}
+.note p:last-child{margin-bottom:0}
+
+.dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 16px;margin:0 0 14px;font-size:15px;max-width:68ch}
+.dl dt{font-weight:700}
+.dl dd{margin:0;min-width:0}
+
+.formula{font-family:var(--f-mono);font-size:15px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:0 0 12px;overflow-x:auto;max-width:68ch}
+
+.tblw{overflow-x:auto;margin:6px 0 18px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.tblw table{border-collapse:collapse;width:100%;font-size:14.5px;font-variant-numeric:tabular-nums}
+.tblw th{font-size:12px;text-align:left;color:var(--muted);font-weight:500;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+.tblw td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+.tblw tr:last-child td{border-bottom:0}
+.tblw td.nw{white-space:nowrap;font-family:var(--f-mono);font-size:13.5px}
+
+/* 사례 카드 */
+.case{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:16px 18px;margin:0 0 6px;max-width:72ch}
+.case .what{margin:0 0 10px}
+.case .take{border-top:1px dashed var(--line);padding-top:10px;margin-top:10px}
+.case .take b{color:var(--tail)}
+.case .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+
+/* 데모 */
+.demo{border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:16px;margin:8px 0 18px;display:grid;gap:14px;max-width:760px}
+.demo .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.demo .lbl{font-size:12.5px;color:var(--muted);min-width:4.5em}
+.chip{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:5px 12px;font-size:14px}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.rng{display:flex;align-items:center;gap:10px;flex:1;min-width:220px}
+.rng input{flex:1;min-width:0;accent-color:var(--tail)}
+.rng output{font-family:var(--f-mono);font-size:13px;min-width:3.5em;text-align:right}
+.irwrap{position:relative;border-radius:10px;background:var(--bg);border:1px solid var(--line);overflow:hidden}
+.irwrap canvas{display:block;width:100%;height:180px}
+.irinfo{display:flex;flex-wrap:wrap;gap:4px 16px;font-family:var(--f-mono);font-size:12.5px;color:var(--muted)}
+.irinfo b{color:var(--ink);font-weight:600}
+.demo .desc{font-size:14.5px;margin:0;color:var(--ink)}
+.walk{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;font-size:13.5px}
+.walk input{width:100%;accent-color:var(--er)}
+.calc{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+.calc input[type=number]{width:6.5em;font:inherit;font-family:var(--f-mono);padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+.calc .out{font-family:var(--f-mono);font-size:15px}
+.calc .out b{font-size:20px}
+.verdict{font-size:14px;padding:4px 10px;border-radius:999px;background:var(--bg);border:1px solid var(--line)}
+
+/* IR 도식 svg */
+.fig{margin:6px 0 16px;border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:12px;max-width:760px}
+.fig svg{display:block;width:100%;height:auto}
+.fig figcaption{font-size:13px;color:var(--muted);margin-top:6px}
+
+.check{list-style:none;padding-left:0!important}
+.check li{padding-left:1.7em;position:relative}
+.check li::before{content:"";position:absolute;left:0;top:.45em;width:1em;height:1em;border:1.5px solid var(--muted);border-radius:4px}
+
+.gl dt{scroll-margin-top:70px}
+.src{font-size:13.5px;color:var(--muted)}
+.src ol{padding-left:1.3em}
+.src a{word-break:break-all}
+.overlay{display:none}
+.side .close{display:none}
+
+@media (max-width:920px){
+  .mbar{display:block}
+  html{scroll-padding-top:70px}
+  .shell{grid-template-columns:minmax(0,1fr);gap:0}
+  .side{position:fixed;z-index:50;top:0;left:0;bottom:0;width:min(86vw,340px);max-height:none;background:var(--bg);
+    padding-top:calc(16px + env(safe-area-inset-top,0px));padding-bottom:calc(24px + env(safe-area-inset-bottom,0px));
+    padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:16px;
+    transform:translateX(-102%);transition:transform .22s ease;box-shadow:0 0 0 1px var(--line)}
+  .side.open{transform:none}
+  .overlay{position:fixed;inset:0;z-index:40;background:rgba(5,8,14,.5)}
+  .overlay.open{display:block}
+  .side .close{display:inline-flex}
+  main{padding-top:18px}
+  .part-head{padding:18px 16px}
+  .dl{grid-template-columns:minmax(0,1fr)} .dl dt{margin-top:6px}
+  .irwrap canvas{height:150px}
+  .demo{padding:12px}
+}
+</style>
+</head>
+<body>
+
+
+<header class="banner" id="top">
+  <div class="banner-in">
+    <div class="eyebrow">M9 ACADEMY · STUDENT HANDOUT · GAME SOUND DESIGN</div>
+    <h1>엠나인아카데미<br>수강생용 <span class="acc">학습자료</span></h1>
+    <p class="sub">게임 사운드디자인(SFX)을 위한 공간 리버브 ― 소리가 공간을 만나는 원리부터 실제 게임 사례까지</p>
+    <div class="irbars" id="irbars" aria-hidden="true"></div>
+    <div class="irlegend" aria-hidden="true"><span><b style="background:#eef3fa"></b>직접음</span><span><b style="background:#e09040"></b>초기반사</span><span><b style="background:#3c6fb8"></b>잔향</span></div>
+    <div class="meta"><span>대상 <b>SFX 사운드디자인 수강생</b></span><span>정리 <b>2026.10.28</b></span></div>
+  </div>
+</header>
+
+<div class="mbar"><div class="mbar-in">
+  <button class="btn" id="openSide" aria-controls="side" aria-expanded="false">☰ 목차·검색</button>
+  <span class="title" id="mbarTitle">게임 SFX 공간 리버브</span>
+</div></div>
+<div class="overlay" id="overlay"></div>
+
+<div class="shell">
+  <aside class="side" id="side" aria-label="목차와 검색">
+    <div class="side-head">
+      <div class="side-row"><strong style="color:var(--ink);font-size:14px">검색</strong><button class="btn close" id="closeSide">닫기 ✕</button></div>
+      <div class="search">
+        <input id="q" type="search" placeholder="개념, 게임 이름, 용어…" autocomplete="off" aria-label="학습자료 검색">
+        <button class="clr" id="clr" aria-label="검색어 지우기" hidden>×</button>
+      </div>
+      <p class="hint">예) 프리딜레이, RT60, 포털, 오버워치, 오클루전</p>
+    </div>
+    <div class="results" id="results" hidden></div>
+    <ul class="toc" id="toc"></ul>
+  </aside>
+
+  <main id="main">
+
+<!-- ═══ 시작 ═══ -->
+<div class="part-head" id="p-start">
+  <span class="tag">Part 0 · 시작하기</span>
+  <h2>왜 공간 리버브인가</h2>
+  <p>게임 사운드디자인(SFX) 분야를 위한 자료입니다. 소리 하나를 잘 만드는 것과, 그 소리가 게임 속 공간에 제대로 놓이게 만드는 건 다른 기술이에요.</p>
+</div>
+
+<section class="sec" id="howto" data-part="start">
+  <h3><span class="n">0.1</span>자료를 활용하는 법</h3>
+  <p>여러분, 이 페이지는 순서대로 읽어도 되고 필요한 부분만 찾아봐도 돼요. 왼쪽(모바일은 위쪽 ☰ 버튼) 검색창에 개념이나 게임 이름을 입력하면 해당 항목으로 바로 이동합니다.</p>
+  <ul>
+    <li><b>1.8 청음 데모</b>와 <b>4.4 공간 전환 데모</b>는 브라우저에서 소리가 재생돼요. 헤드폰을 쓰고, 처음엔 볼륨을 낮춰 두세요.</li>
+    <li>게임 사례는 개발사 발표, 공식 블로그, 미들웨어 회사 자료로 확인한 내용만 적었어요. 출처는 맨 아래에 있어요.</li>
+    <li>이 페이지에서 색은 의미가 있어요. <span class="c-d">검정(흰색)</span>은 직접음, <span class="c-er">앰버</span>는 초기반사, <span class="c-tail">블루</span>는 잔향이에요.</li>
+  </ul>
+</section>
+
+<section class="sec" id="why" data-part="start">
+  <h3><span class="n">0.2</span>리버브는 장소를 알려 주는 정보예요</h3>
+  <p>같은 발소리라도 콘크리트 지하실, 카펫 깔린 호텔 복도, 눈 덮인 숲에서는 전혀 다르게 들려요. 플레이어는 화면을 보기 전에 리버브만 듣고도 지금 좁은 곳에 있는지, 넓은 곳에 있는지, 벽이 단단한지 부드러운지를 알아채요.</p>
+  <p>그래서 게임에서 리버브는 소리를 꾸미는 효과가 아니라 장소에 대한 정보예요. 이 정보가 화면과 어긋나면 플레이어는 이유를 몰라도 어색하다고 느껴요.</p>
+  <div class="note game"><b class="lb">게임에서는</b>
+    <p>The Last of Us Part II의 사운드디자이너 Justin Mullens는 리버브가 "밀도 높은 공간과 열린 공간, 활기 있는 공간과 죽은 공간"의 대비를 받쳐 주는 데 큰 역할을 했다고 말했어요. 실내 복도에서 뒷골목, 주차장, 들판으로 이어지는 공간의 흐름을 소리로 설계한 것입니다.</p>
+    <p>Call of Duty: Modern Warfare(2019)는 넓게 트인 곳에서는 총성이 크고 깊게 울리고, 좁은 곳에서는 더 먹먹하고 잔향과 메아리가 줄어들도록 만들었다고 소개했어요.</p>
+  </div>
+</section>
+
+<!-- ═══ Part 1 ═══ -->
+<div class="part-head" id="p-base">
+  <span class="tag">Part 1 · 공간 음향 기초</span>
+  <h2>소리가 공간을 만나면</h2>
+  <p>리버브 플러그인의 파라미터는 실제 공간에서 일어나는 현상을 이해하기 위한 용어입니다. 현상을 먼저 이해하면 어느 노브를 얼마나 돌려야 하는지 알 수 있습니다.</p>
+</div>
+
+<section class="sec" id="three" data-part="base">
+  <h3><span class="n">1.1</span>직접음 · 초기반사 · 잔향</h3>
+  <p>손뼉을 한 번 치면 우리 귀에는 세 단계로 소리가 도착해요.</p>
+  <figure class="fig">
+    <svg viewBox="0 0 720 210" role="img" aria-label="임펄스 응답 도식: 직접음, 초기반사, 잔향">
+      <line x1="40" y1="170" x2="700" y2="170" stroke="var(--muted)" stroke-width="1"/>
+      <line x1="40" y1="20" x2="40" y2="170" stroke="var(--muted)" stroke-width="1"/>
+      <text x="700" y="192" text-anchor="end" font-size="12" fill="var(--muted)" font-family="JetBrains Mono, monospace">시간 →</text>
+      <text x="34" y="24" text-anchor="end" font-size="12" fill="var(--muted)" font-family="JetBrains Mono, monospace">크기</text>
+      <rect x="58" y="30" width="6" height="140" fill="var(--ink)"/>
+      <g fill="var(--er)">
+        <rect x="104" y="80" width="5" height="90"/><rect x="122" y="96" width="5" height="74"/><rect x="136" y="88" width="5" height="82"/>
+        <rect x="158" y="108" width="5" height="62"/><rect x="171" y="116" width="5" height="54"/><rect x="190" y="112" width="5" height="58"/>
+      </g>
+      <path d="M205 120 C 260 128, 320 146, 400 156 S 560 167, 690 169 L 690 170 L 205 170 Z" fill="var(--tail)" opacity=".35"/>
+      <path d="M205 120 C 260 128, 320 146, 400 156 S 560 167, 690 169" fill="none" stroke="var(--tail)" stroke-width="2"/>
+      <line x1="64" y1="44" x2="104" y2="44" stroke="var(--muted)" stroke-dasharray="3 3"/>
+      <text x="84" y="38" text-anchor="middle" font-size="11.5" fill="var(--muted)" font-family="JetBrains Mono, monospace">프리딜레이</text>
+      <text x="61" y="200" text-anchor="middle" font-size="13" fill="var(--ink)" font-weight="700">직접음</text>
+      <text x="150" y="200" text-anchor="middle" font-size="13" fill="var(--er)" font-weight="700">초기반사</text>
+      <text x="420" y="200" text-anchor="middle" font-size="13" fill="var(--tail)" font-weight="700">잔향 (리버브 테일)</text>
+    </svg>
+    <figcaption>임펄스 응답(IR)을 단순하게 그린 그림이에요. 실제 공간에서는 초기반사와 잔향이 겹치면서 넘어가요.</figcaption>
+  </figure>
+  <dl class="dl">
+    <dt class="c-d">직접음</dt><dd>소리 나는 곳에서 귀까지 곧장 온 소리. 방향을 알려 주는 건 주로 이 소리예요.</dd>
+    <dt class="c-er">초기반사</dt><dd>벽, 바닥, 천장에 한두 번 부딪히고 온 소리. 하나하나 구분되는 반사이고, 공간의 크기와 모양, 벽까지의 거리를 알려 줘요.</dd>
+    <dt class="c-tail">잔향</dt><dd>수없이 반사된 소리가 뭉쳐서 방향 없이 남는 꼬리. 공간의 부피와 재질을 알려 줘요.</dd>
+  </dl>
+  <div class="note game"><b class="lb">게임에서는</b><p>이 세 단계를 엔진에서 따로 처리하는 경우가 많아요. 직접음은 3D 패닝과 오클루전으로, 초기반사는 레이캐스트나 반사 플러그인으로, 잔향은 공간마다 지정한 리버브 버스로 처리하는 식이에요. Part 2에서 자세히 볼게요.</p></div>
+</section>
+
+<section class="sec" id="delay" data-part="base">
+  <h3><span class="n">1.2</span>반사 지연 계산하기</h3>
+  <p>소리는 공기 중에서 1초에 약 343m(20°C 기준) 가요. 1ms에 약 34cm예요. 그래서 벽까지 거리만 알면 반사가 얼마나 늦게 도착하는지 계산할 수 있어요.</p>
+  <div class="formula">반사 지연(ms) ≈ (반사 경로 길이 − 직접 경로 길이) ÷ 343 × 1000</div>
+  <p>내가 소리 나는 곳 바로 옆에 있고 벽이 5m 앞에 있다면, 반사는 10m를 왕복하니까 약 29ms 늦게 와요.</p>
+  <div class="demo" aria-label="반사 지연 계산기">
+    <div class="calc">
+      <label for="dist">벽(반사면)까지 거리</label>
+      <input id="dist" type="number" min="0.5" max="500" step="0.5" value="5"> <span>m</span>
+      <span class="out">왕복 지연 <b id="dly">29</b> ms</span>
+      <span class="verdict" id="verdict">원음에 붙어 들려요</span>
+    </div>
+    <p class="desc" id="calcNote">총구와 듣는 사람이 같은 위치라고 가정한 왕복 거리예요.</p>
+  </div>
+  <p>사람 귀는 대략 30~50ms 안쪽으로 도착한 반사를 원음과 하나로 합쳐서 들어요. 이 반사는 소리를 두껍게 하거나 공간감을 주지만 따로 들리지는 않아요. 그보다 늦게 오면 슬랩 에코(탁 튀는 반사)로, 100ms를 넘어가면 또렷한 메아리로 들리기 시작해요. 경계는 소리의 길이와 크기에 따라 달라지니까 대략적인 기준으로만 쓰세요.</p>
+  <div class="note game"><b class="lb">게임에서는</b><p>협곡이나 고층 빌딩 사이에서 총을 쏘면 탕 소리 뒤에 따로 떨어진 메아리가 들려요. 반사면이 수십~수백 m 떨어져 있어서 지연이 수백 ms가 되기 때문이에요. 이런 곳은 긴 리버브보다 딜레이로 표현하는 게 더 사실적이에요.</p></div>
+</section>
+
+<section class="sec" id="rt60" data-part="base">
+  <h3><span class="n">1.3</span>RT60 · 잔향 시간</h3>
+  <p>RT60은 소리가 멈춘 뒤 잔향이 60dB 줄어드는 데 걸리는 시간이에요. 리버브 플러그인의 <b>Decay</b>나 <b>Reverb Time</b>이 이 값이에요.</p>
+  <p>잔향 시간은 두 가지로 정해져요. 공간이 클수록 길어지고, 흡음재가 많을수록 짧아져요. 실내 음향에서 많이 쓰는 사빈(Sabine) 공식이 이 관계를 보여 줘요.</p>
+  <div class="formula">RT60 ≈ 0.161 × V ÷ A &nbsp;&nbsp;(V = 방 부피 m³, A = 총 흡음량 m²)</div>
+  <p>공식을 외울 필요는 없어요. 부피가 커지면 잔향이 길어지고, 소파나 커튼 같은 흡음재가 늘면 짧아진다는 관계만 이해하면 됩니다.</p>
+</section>
+
+<section class="sec" id="predelay" data-part="base">
+  <h3><span class="n">1.4</span>프리딜레이 (Pre-delay)</h3>
+  <p>직접음이 들린 뒤 리버브가 시작되기까지의 간격이에요. 큰 공간일수록 벽이 멀어서 반사가 늦게 오니까 프리딜레이도 길어져요.</p>
+  <ul>
+    <li>프리딜레이를 늘리면 공간이 커 보이고, 원음 어택이 리버브에 묻히지 않아서 명료해져요.</li>
+    <li>잔향 시간이 같아도 프리딜레이 0ms와 40ms는 공간 크기가 다르게 들려요.</li>
+    <li>작은 방에 프리딜레이를 길게 주면 원음과 리버브가 분리되어 공간이 어색하게 들립니다.</li>
+  </ul>
+  <div class="note tip"><b class="lb">실전 팁</b><p>총성이나 타격음처럼 어택이 중요한 소리는 프리딜레이를 조금이라도 주는 편이 좋아요. 리버브가 어택 위로 겹치면 펀치가 줄어들어요.</p></div>
+</section>
+
+<section class="sec" id="damping" data-part="base">
+  <h3><span class="n">1.5</span>재질과 고역 감쇠 (Damping)</h3>
+  <p>벽 재질마다 흡수하는 주파수가 달라요. 딱딱한 면은 고역까지 잘 반사하고, 부드러운 면은 고역을 많이 흡수해요.</p>
+  <dl class="dl">
+    <dt>콘크리트·타일·유리·금속</dt><dd>밝고 길게 남아요. 금속은 특정 음이 울리는 링잉이 생기기도 해요.</dd>
+    <dt>나무</dt><dd>중역이 따뜻하게 남고 고역은 적당히 줄어요.</dd>
+    <dt>카펫·커튼·소파·흙</dt><dd>고역이 빨리 사라지고 잔향이 짧아요.</dd>
+    <dt>공기</dt><dd>거리가 멀어질수록 고역이 줄어요. 큰 공간의 잔향은 자연스럽게 어두워져요.</dd>
+  </dl>
+  <p>리버브 플러그인의 <b>HF Damping</b>, <b>High Cut</b>, <b>HF Decay</b> 같은 파라미터가 이걸 흉내 내요. 같은 2초 잔향이라도 고역 감쇠 설정에 따라 성당처럼도, 지하 주차장처럼도 들릴 수 있습니다.</p>
+</section>
+
+<section class="sec" id="diffusion" data-part="base">
+  <h3><span class="n">1.6</span>확산(Diffusion)과 밀도(Density)</h3>
+  <p>확산은 반사가 얼마나 고르게 흩어지는지예요. 울퉁불퉁한 동굴 벽이나 책장이 많은 방은 반사가 잘게 흩어져 부드럽게 들리고, 평평한 두 벽이 마주 보는 복도는 반사가 같은 간격으로 반복돼 "따다다닥" 하는 플러터 에코가 생겨요.</p>
+  <p>확산과 밀도를 낮추면 반사 하나하나가 들리는 거친 리버브가 되고, 높이면 매끈한 리버브가 돼요. 좁은 콘크리트 통로를 만들 때 일부러 확산을 낮춰 플러터를 살리면 장소가 훨씬 구체적으로 들려요.</p>
+</section>
+
+<section class="sec" id="send" data-part="base">
+  <h3><span class="n">1.7</span>Wet/Dry와 Send 구조</h3>
+  <p>원음을 Dry, 리버브를 거친 소리를 Wet이라고 해요. 리버브를 거는 방법은 두 가지예요.</p>
+  <dl class="dl">
+    <dt>Insert</dt><dd>트랙에 리버브를 직접 걸고 Mix 노브로 비율을 정해요. 그 소리 하나에만 특수한 공간을 줄 때 써요.</dd>
+    <dt>Send (Aux)</dt><dd>리버브를 FX 트랙(또는 Aux 버스)에 하나 걸어 두고, 여러 트랙이 보내는 양만 조절해요. 모든 소리가 같은 공간에 있는 것처럼 들려요.</dd>
+  </dl>
+  <div class="note game"><b class="lb">게임에서는</b><p>게임은 거의 항상 Send 구조예요. 공간마다 리버브 버스를 하나씩 두고, 소리마다 보내는 양만 다르게 해요. 수백 개 소리에 리버브를 각각 걸면 CPU가 버티지 못하고, 같은 공간에 있는 소리끼리 리버브가 달라서 공간도 어색해져요. Wwise에서는 이걸 Aux Bus, Unreal에서는 Submix와 Reverb Effect로 다뤄요.</p></div>
+</section>
+
+<section class="sec" id="demo" data-part="base">
+  <h3><span class="n">1.8</span>청음 데모 · 같은 소리, 다른 공간</h3>
+  <p>소리 하나를 고르고 공간을 바꿔 가며 들어 보세요. 아래 그래프는 지금 공간의 임펄스 응답이에요. 공간을 바꿀 때 초기반사(앰버)와 잔향(블루)의 모양이 어떻게 바뀌는지 같이 보세요.</p>
+  <div class="demo" id="revDemo">
+    <div class="row"><span class="lbl">소리</span><div class="row" id="srcChips"></div></div>
+    <div class="row"><span class="lbl">공간</span><div class="row" id="roomChips"></div></div>
+    <div class="row">
+      <span class="lbl">Wet</span>
+      <div class="rng"><input id="wet" type="range" min="0" max="100" value="40" aria-label="리버브 양"><output id="wetOut">40%</output></div>
+    </div>
+    <div class="row">
+      <button class="btn primary" id="play">▶ 재생</button>
+      <button class="btn" id="dryOnly" aria-pressed="false">원음만</button>
+      <button class="btn" id="wetOnly" aria-pressed="false">리버브만</button>
+    </div>
+    <div class="irwrap"><canvas id="irCanvas" width="760" height="180" aria-label="임펄스 응답 그래프"></canvas></div>
+    <div class="irinfo" id="irInfo"></div>
+    <p class="desc" id="roomDesc"></p>
+  </div>
+  <p class="hint">데모의 공간은 공식으로 만든 근사치예요. 실제 녹음한 IR만큼 사실적이진 않지만 공간마다 무엇이 달라지는지 비교하기엔 충분해요.</p>
+</section>
+
+<!-- ═══ Part 2 ═══ -->
+<div class="part-head" id="p-game">
+  <span class="tag">Part 2 · 게임 리버브 구현 방식</span>
+  <h2>게임 엔진은 공간을 이렇게 다뤄요</h2>
+  <p>영화는 장면마다 사람이 리버브를 직접 정해 주지만, 게임은 플레이어가 어디로 갈지 몰라요. 그래서 공간을 미리 정의하고 엔진이 실시간으로 바꿔 주는 구조가 필요해요.</p>
+</div>
+
+<section class="sec" id="diff" data-part="game">
+  <h3><span class="n">2.1</span>영상 사운드와 게임 사운드의 차이</h3>
+  <ul>
+    <li><b>듣는 위치가 계속 움직여요.</b> 리버브는 플레이어 위치에 따라 실시간으로 바뀌어야 해요.</li>
+    <li><b>같은 소리가 수천 번 나요.</b> 발소리 하나가 복도, 계단, 야외에서 모두 맞게 들려야 해요.</li>
+    <li><b>CPU와 메모리 예산이 있어요.</b> 그래픽, 물리, AI와 자원을 나눠 써야 해요.</li>
+    <li><b>정보 전달이 우선이에요.</b> 리버브 때문에 적의 방향이나 거리를 알기 어려워진다면 다시 조정해야 합니다.</li>
+  </ul>
+</section>
+
+<section class="sec" id="zone" data-part="game">
+  <h3><span class="n">2.2</span>방식 ① 리버브 존 (프리셋 공간)</h3>
+  <p>가장 오래되고 지금도 많이 쓰는 방식이에요. 레벨 안에 보이지 않는 구역을 그리고, 플레이어가 그 안에 들어가면 지정한 리버브가 켜져요.</p>
+  <ul>
+    <li>Unity: <b>Audio Reverb Zone</b> 컴포넌트 (프리셋 선택 가능)</li>
+    <li>Unreal Engine: <b>Audio Volume</b>의 Reverb 설정과 Interior 설정</li>
+    <li>Wwise·FMOD: 엔진에서 구역을 판정하고 해당 리버브 버스로 보내는 양을 바꿈</li>
+  </ul>
+  <div class="note game"><b class="lb">게임에서는</b><p>1998년 Half-Life(GoldSrc 엔진)는 맵에 <b>env_sound</b>라는 엔티티를 놓아 공간을 지정했어요. 플레이어가 반경 안에 들어오고 그 엔티티가 시야에 있으면 Room Type에 지정한 DSP 효과가 켜지는 방식이에요. Room Type은 Metal, Tunnel, Chamber, Concrete, Cavern 같은 종류가 Small·Medium·Large로 나뉘어 0번부터 28번까지 있어요. 레벨 디자이너가 공간마다 알맞은 번호를 지정하는 방식입니다.</p></div>
+  <p><b>장점</b>은 가볍고 예측 가능하다는 거예요. <b>단점</b>은 구역 경계에서 소리가 갑자기 바뀌기 쉽고, 다른 방에서 나는 소리도 내가 있는 방의 리버브로 들린다는 거예요.</p>
+</section>
+
+<section class="sec" id="blend" data-part="game">
+  <h3><span class="n">2.3</span>방식 ② 존 블렌딩과 스냅샷</h3>
+  <p>존 경계에 전환 구간을 두고 두 리버브를 크로스페이드하는 방식이에요. 동굴 입구에서 몇 미터에 걸쳐 동굴 리버브를 서서히 올리고 야외 리버브를 내리는 식이에요.</p>
+  <ul>
+    <li>FMOD에서는 <b>Snapshot</b>으로 리버브 버스 설정을 상태별로 저장하고 섞어요.</li>
+    <li>Wwise에서는 Aux Send 값을 위치에 따라 보간하거나, 게임 파라미터(RTPC)로 리버브 양을 조절해요.</li>
+    <li>전환 구간 길이가 너무 짧으면 툭 끊기고, 너무 길면 공간이 흐려져요. 4.4에서 직접 들어 보세요.</li>
+  </ul>
+</section>
+
+<section class="sec" id="rooms" data-part="game">
+  <h3><span class="n">2.4</span>방식 ③ 룸과 포털 (Rooms &amp; Portals)</h3>
+  <p>존 방식의 가장 큰 문제, 즉 "다른 방의 소리도 내 방 리버브로 들린다"를 해결한 구조예요. Wwise Spatial Audio의 개념으로 정리할게요.</p>
+  <dl class="dl">
+    <dt>Room</dt><dd>하나의 음향 공간. 야외도 Room이 될 수 있어요. 방마다 리버브용 Aux Bus가 하나씩 지정돼요.</dd>
+    <dt>Portal</dt><dd>두 방을 잇는 문이나 창 같은 개구부. 양쪽이 뚫린 상자 모양이고, 깊이 방향으로 전환이 보간돼요.</dd>
+  </dl>
+  <ul>
+    <li>옆방에서 나는 소리는 <b>옆방의 리버브</b>를 거친 뒤, <b>문(포털) 위치에서</b> 나오는 소리로 들려요. 실제로 문 너머 소리를 들을 때와 같아요.</li>
+    <li>포털에 가까이 갈수록 옆방 리버브가 넓게 퍼져서, 문간에서 50%, 방 안에 완전히 들어가면 100%가 돼요.</li>
+    <li>모퉁이 너머 소리는 문을 통해 꺾여 오는 <b>회절</b>로 계산하고, 꺾인 각도가 클수록 소리를 줄이고 고역을 깎아요.</li>
+    <li>방으로 깔끔하게 나뉘는 실내 레벨에 잘 맞아요. 장애물이 많은 야외는 지오메트리 기반 회절을 쓰라고 Audiokinetic은 권해요.</li>
+  </ul>
+  <div class="note tip"><b class="lb">여러분이 가져갈 것</b><p>이 구조를 알면 레벨을 "방 몇 개, 문 몇 개"로 나눠서 분석할 수 있게 됩니다. 리디자인 과제에서도 공간 목록과 연결 지점을 먼저 그려 두면 리버브 설계가 훨씬 빨라져요.</p></div>
+</section>
+
+<section class="sec" id="reflect" data-part="game">
+  <h3><span class="n">2.5</span>방식 ④ 레이캐스트 초기반사</h3>
+  <p>잔향은 리버브 버스에 맡기고, <span class="c-er">초기반사</span>만 실제 지오메트리로 계산하는 방식이에요. 소리 위치에서 주변 벽으로 선(레이)을 쏴서 반사 경로를 찾고, 그 거리만큼 지연된 반사음을 해당 방향에서 재생해요.</p>
+  <ul>
+    <li><b>Wwise Reflect</b>: 표면 반사를 시뮬레이션하는 런타임 플러그인. 거리에 따른 지연과 도플러를 반영하고, 반사 차수는 최대 4차까지 지원해요. 차수를 올릴수록 표현은 풍부해지지만 처리 부하가 커져요.</li>
+    <li>발소리나 총성처럼 짧고 어택이 분명한 소리에 효과가 커요. 바람, 비 같은 앰비언스에는 잘 맞지 않고, 모바일처럼 처리 부하에 민감한 환경에서는 신중하게 써야 해요.</li>
+  </ul>
+  <div class="note game"><b class="lb">게임에서는</b><p>Call of Duty: Modern Warfare(2019)는 무기 반사 시스템을 장면 지오메트리와 연결했다고 소개했어요. 게임이 소리가 환경과 부딪히는 지점을 알고, 그 위치에서 반사음을 재생해요. 건물 옆, 자동차 앞, 지하철 터널 안에서 쏠 때 반사가 각각 달라져요.</p></div>
+</section>
+
+<section class="sec" id="wave" data-part="game">
+  <h3><span class="n">2.6</span>방식 ⑤ 사전 계산 파동 음향</h3>
+  <p>레벨 지오메트리를 놓고 소리가 파동으로 퍼지는 걸 미리 시뮬레이션해서 결과를 저장(베이크)해 두고, 게임 중에는 그 데이터를 꺼내 쓰는 방식이에요.</p>
+  <ul>
+    <li>Microsoft의 <b>Project Triton</b>(제품명 Project Acoustics)이 대표적이에요. 회절, 산란된 반사, 잔향 같은 파동 현상을 정적 3D 지오메트리 위에서 계산해요.</li>
+    <li>결과는 오클루전, 포털링, 리버브 같은 일반적인 DSP 파라미터로 바뀌어서 미들웨어로 전달돼요.</li>
+    <li>장애물 주변에서 오클루전이 부드럽게 변하고, 큰 홀에서는 잔향이 길어지는 게 소리와 청자가 움직이는 대로 바뀌어요.</li>
+  </ul>
+  <p>정적 지오메트리를 기준으로 미리 계산하는 방식이라, 게임 중에 부서지는 벽 같은 변화를 반영하려면 별도 처리가 필요할 수 있어요.</p>
+</section>
+
+<section class="sec" id="sdk" data-part="game">
+  <h3><span class="n">2.7</span>방식 ⑥ 물리 기반 음향 SDK</h3>
+  <p>Valve의 <b>Steam Audio</b>는 반사, 컨볼루션 리버브, 경로 탐색(복도·모퉁이·문·창을 따라 도는 소리), 레이캐스트 오클루전, 벽을 뚫고 오는 투과음까지 한 묶음으로 제공해요. 실시간 계산과 사전 계산을 모두 지원하고 Unity, Unreal Engine, FMOD Studio용 통합이 있어요.</p>
+  <div class="note game"><b class="lb">게임에서는</b><p>Escape from Tarkov는 2020년 5월 패치에서 Steam Audio를 도입했다고 알려졌는데, 당시 설명은 "소리 위치감 개선을 위한 첫 단계"였어요. 이후 0.16.7 패치에서도 소리 반사와 차단 방식, 층과 계단 사이 소리 전달을 다시 조정했어요. 이런 시스템은 한 번 적용하고 끝나지 않고, 플레이어 피드백을 반영해 계속 개선합니다.</p></div>
+</section>
+
+<section class="sec" id="occlusion" data-part="game">
+  <h3><span class="n">2.8</span>오클루전·옵스트럭션과 리버브</h3>
+  <p>리버브와 함께 반드시 알아야 하는 개념입니다. 둘 다 "가려진 소리"지만 리버브를 다루는 방식이 달라요.</p>
+  <dl class="dl">
+    <dt>옵스트럭션 (Obstruction)</dt><dd>같은 방 안에서 기둥이나 상자가 직접음만 가린 상태. 직접음은 작고 먹먹해지지만, 리버브는 방 전체에서 오니까 그대로 들려요.</dd>
+    <dt>오클루전 (Occlusion)</dt><dd>벽 너머처럼 소리와 청자가 완전히 막힌 상태. 직접음과 리버브가 모두 먹먹해져요.</dd>
+  </dl>
+  <p>Wwise도 이 구분을 따라서, 옵스트럭션은 직접음(Dry) 경로에만, 오클루전은 직접음과 리버브(Wet) 모두에 적용해요.</p>
+  <div class="note game"><b class="lb">게임에서는</b>
+    <p>Overwatch는 레이캐스트와 경로 우회(path diversion) 기법으로 오브젝트마다 오클루전 값을 구하고, 그 값을 RTPC 커브로 볼륨, 로우패스·하이패스 필터, Aux Send 양에 연결했어요. 공간감에는 리버브와 자체 제작한 쿼드 딜레이 플러그인을 썼어요.</p>
+    <p>Hunt: Showdown은 모든 음원에서 청자 쪽으로 레이를 쏴서 장애물과 그 재질을 확인해요. 나무보다 콘크리트가 소리를 더 많이 막아요. 지하 공간은 이 방식이 잘 맞지 않아서, 높은 오클루전 값을 강제로 주는 특수 재질을 따로 지정했다고 밝혔어요.</p>
+  </div>
+</section>
+
+<section class="sec" id="compare" data-part="game">
+  <h3><span class="n">2.9</span>방식 한눈에 비교</h3>
+  <div class="tblw"><table>
+    <thead><tr><th>방식</th><th>무엇을 계산</th><th>세팅 작업</th><th>실행 부하</th><th>잘 맞는 곳</th></tr></thead>
+    <tbody>
+      <tr><td><b>리버브 존</b></td><td>내가 있는 구역의 잔향</td><td>구역 그리기</td><td>낮음</td><td>대부분의 게임, 모바일</td></tr>
+      <tr><td><b>존 블렌딩·스냅샷</b></td><td>구역 사이 전환</td><td>전환 구간 설계</td><td>낮음</td><td>야외↔실내가 잦은 게임</td></tr>
+      <tr><td><b>룸 &amp; 포털</b></td><td>방별 잔향, 문을 통한 전달·회절</td><td>방과 문 배치</td><td>중간</td><td>실내 위주 FPS·호러·스텔스</td></tr>
+      <tr><td><b>레이캐스트 반사</b></td><td>초기반사 위치·지연</td><td>반사 재질 지정</td><td>중간~높음</td><td>총성·발소리가 중요한 FPS·VR</td></tr>
+      <tr><td><b>사전 계산 파동</b></td><td>회절·반사·잔향 전체</td><td>베이크 과정</td><td>실행 시 낮음, 베이크 무거움</td><td>정적 레벨이 큰 대작</td></tr>
+      <tr><td><b>물리 기반 SDK</b></td><td>반사·경로·오클루전·투과</td><td>재질·씬 설정</td><td>설정에 따라 다양</td><td>VR, 위치감이 핵심인 게임</td></tr>
+    </tbody>
+  </table></div>
+  <p>실행 부하와 작업량은 일반적인 경향이에요. 실제 수치는 엔진, 설정, 플랫폼마다 크게 달라요. 그리고 대부분의 게임은 하나만 쓰지 않고 존 리버브에 오클루전, 초기반사 같은 것을 섞어 써요.</p>
+</section>
+
+<!-- ═══ Part 3 ═══ -->
+<div class="part-head cases" id="p-cases">
+  <span class="tag">Part 3 · 게임 사례</span>
+  <h2>게임은 실제로 이렇게 했어요</h2>
+  <p>개발사가 직접 밝힌 내용 위주로 정리했어요. 각 사례 끝의 "가져갈 것"이 여러분 작업에 바로 쓸 수 있는 부분이에요.</p>
+</div>
+
+<section class="sec" id="c-hl" data-part="cases">
+  <h3><span class="n">3.1</span>Half-Life <span class="yr">1998 · Valve</span></h3>
+  <div class="case">
+    <div class="chips"><span class="tag-m">리버브 존</span><span class="tag-m">프리셋</span></div>
+    <p class="what">맵에 env_sound 엔티티를 배치하고 Room Type 번호(0~28)를 지정해 공간마다 DSP 효과를 켰어요. Metal, Tunnel, Chamber, Bright, Water, Concrete, Big, Cavern, Weirdo 같은 분류가 크기별로 나뉘어 있어요. 플레이어가 반경 안에 있고 엔티티가 시야에 있을 때 작동해요.</p>
+    <div class="take"><b>가져갈 것</b> · 공간을 "재질 × 크기"로 분류하는 습관. 지금도 리버브 프리셋 라이브러리를 이 기준으로 정리하면 레벨에 바로 매칭하기 쉬워요.</div>
+  </div>
+</section>
+
+<section class="sec" id="c-thief" data-part="cases">
+  <h3><span class="n">3.2</span>Thief: The Dark Project <span class="yr">1998 · Looking Glass</span></h3>
+  <div class="case">
+    <div class="chips"><span class="tag-m">소리 전파</span><span class="tag-m">게임플레이</span></div>
+    <p class="what">Dark Engine은 레벨 디자이너가 레벨 안의 소리 전파를 직접 제어할 수 있었어요. 소리는 적 AI의 인지와 연결돼서, 작은 소리에는 경비가 어렴풋이 반응하고 큰 소리에는 수색 상태로 들어가요.</p>
+    <div class="take"><b>가져갈 것</b> · 공간 음향이 분위기만이 아니라 게임 규칙이 될 수 있다는 것. 스텔스 게임에서 바닥 재질과 공간 울림은 플레이어가 위험을 판단하는 정보예요.</div>
+  </div>
+</section>
+
+<section class="sec" id="c-r6" data-part="cases">
+  <h3><span class="n">3.3</span>Rainbow Six Siege <span class="yr">2015 · Ubisoft Montreal</span></h3>
+  <div class="case">
+    <div class="chips"><span class="tag-m">소리 전파</span><span class="tag-m">파괴 환경</span><span class="tag-m">회절</span></div>
+    <p class="what">오디오 디렉터 Louis Philippe Dion은 실제로 소리가 이동하는 방식을 최대한 흉내 내는 소리 전파 기술을 만들었다고 설명했어요. 소리는 표면에 반사되고, 물체를 돌아 회절하고, 벽을 통과하면서 일부 주파수를 잃어요. 물처럼 가장 저항이 적은 길로 흐르기 때문에, 플레이어가 벽에 구멍을 내거나 문을 부수면 소리가 들어오는 길이 바뀌어요.</p>
+    <div class="take"><b>가져갈 것</b> · 소리는 직선이 아니라 열린 길을 따라 온다는 것. 그래서 열린 문 쪽에서 들리는 소리가 실제 적 위치와 다를 수 있어요. 레벨이 바뀌는 게임이라면 리버브와 전파를 고정값으로 두면 안 돼요.</div>
+  </div>
+</section>
+
+<section class="sec" id="c-ow" data-part="cases">
+  <h3><span class="n">3.4</span>Overwatch <span class="yr">2016 · Blizzard</span></h3>
+  <div class="case">
+    <div class="chips"><span class="tag-m">오클루전</span><span class="tag-m">RTPC</span><span class="tag-m">Play by Sound</span></div>
+    <p class="what">게임 디렉터의 목표는 "소리로 플레이하기(Play by Sound)"였어요. 사운드팀은 레이캐스트와 경로 우회로 오클루전 값을 구하고 Wwise RTPC로 볼륨, 필터, Aux Send를 조절했어요. 일부 소리는 실내용과 실외용을 따로 만들었고, 공간감에는 리버브와 자체 쿼드 딜레이 플러그인을 썼어요. 로직을 Wwise 안에 두어서 사운드팀이 다시 베이크하지 않고 공간 반응을 조정할 수 있었어요.</p>
+    <div class="take"><b>가져갈 것</b> · 경쟁 게임에서는 사실감보다 판독성이 먼저예요. 리버브와 오클루전도 "적이 어디 있는지 더 잘 들리게" 하는 방향으로 조절해야 해요.</div>
+  </div>
+</section>
+
+<section class="sec" id="c-gears" data-part="cases">
+  <h3><span class="n">3.5</span>Gears of War 4 <span class="yr">2016 · The Coalition</span></h3>
+  <div class="case">
+    <div class="chips"><span class="tag-m">사전 계산 파동 음향</span><span class="tag-m">Project Triton</span></div>
+    <p class="what">Microsoft Research와 함께 Project Triton을 실제 출시 게임에 적용했어요. 정적 레벨 지오메트리에서 회절, 산란 반사, 잔향을 미리 계산해 두고, 장애물 주변의 부드러운 오클루전과 큰 홀의 긴 잔향이 소리와 청자 위치에 따라 바뀌게 했어요. Unreal Engine 4와 Wwise로 통합했어요. 중요한 건 팀이 이 물리 데이터를 그대로 쓰지 않고, 데이터를 바탕으로 영화적이고 감정적인 음향을 설계했다는 점이에요. Microsoft는 이후 Sea of Thieves, Borderlands 3도 Triton을 적용한 주요 게임으로 소개했어요.</p>
+    <div class="take"><b>가져갈 것</b> · 시뮬레이션은 재료이고, 최종 판단은 디자이너가 해요. 물리적으로 정확한 소리가 게임에 맞는 소리는 아니에요.</div>
+  </div>
+</section>
+
+<section class="sec" id="c-hunt" data-part="cases">
+  <h3><span class="n">3.6</span>Hunt: Showdown <span class="yr">2018~ · Crytek</span></h3>
+  <div class="case">
+    <div class="chips"><span class="tag-m">레이캐스트 오클루전</span><span class="tag-m">재질</span><span class="tag-m">판독성</span></div>
+    <p class="what">모든 음원이 청자 쪽으로 레이를 쏴서 장애물과 재질을 확인해요. 콘크리트는 나무보다 많이 막아요. 오두막이나 건물에서는 잘 작동했지만 지하 공간은 문제가 있어서, 높은 오클루전을 강제로 주는 특수 재질을 지정해 해결했어요. 일부 예외 상황은 아직 완벽하지 않다고 직접 밝혔어요. 사운드팀은 AI 소리에서 "무엇인가, 어디 있나, 어떤 상태인가"를 귀로 알 수 있게 하는 걸 목표로 삼았어요.</p>
+    <div class="take"><b>가져갈 것</b> · 자동 시스템이 안 맞는 공간은 디자이너가 예외 규칙을 만들어 고쳐요. 포트폴리오 설명에 이런 문제 해결 과정을 쓰면 실무 감각을 보여 줄 수 있어요.</div>
+  </div>
+</section>
+
+<section class="sec" id="c-cod" data-part="cases">
+  <h3><span class="n">3.7</span>Call of Duty: Modern Warfare <span class="yr">2019 · Infinity Ward</span></h3>
+  <div class="case">
+    <div class="chips"><span class="tag-m">무기 반사 시스템</span><span class="tag-m">리버브·슬랩 딜레이</span><span class="tag-m">총성</span></div>
+    <p class="what">무기 소리에 세 가지 환경 시스템을 새로 넣었다고 소개했어요. 공간 기반으로 메아리와 잔향을 더하는 리버브·슬랩 딜레이 DSP 시스템, 모든 총성과 함께 재생되는 상황별 대기(atmospheric) 레이어, 장면 지오메트리와 연결된 무기 반사 시스템이에요. 반사음은 음속에 맞춘 지연과 감쇠로 전달돼요. 넓은 곳에서는 크고 깊은 울림, 좁은 곳에서는 먹먹하고 잔향이 적은 소리가 나요. 총성 녹음에는 한 발에 약 90개 마이크를 썼고 그중 20개가 플레이어 시점용이었어요.</p>
+    <div class="take"><b>가져갈 것</b> · 총성은 "본체 + 공간 반응"으로 나눠 설계해요. 본체는 공간과 상관없이 같게, 공간 반응 레이어는 환경마다 바꾸는 구조예요. 4.3에서 구체적으로 다뤄요.</div>
+  </div>
+</section>
+
+<section class="sec" id="c-tlou" data-part="cases">
+  <h3><span class="n">3.8</span>The Last of Us Part II <span class="yr">2020 · Naughty Dog</span></h3>
+  <div class="case">
+    <div class="chips"><span class="tag-m">구역별 리버브</span><span class="tag-m">공간 대비</span><span class="tag-m">IR 공유</span></div>
+    <p class="what">레벨을 구역(region)으로 나누고 구역마다 리버브와 반사 정도(reflectivity)를 지정했어요. 야외는 넓고 깊은 사운드스테이지, 실내는 조이고 감싸는 느낌으로 대비를 줬어요. 앰비언스는 구역마다 수백 개의 겹치는 이미터로 만들어서, 그 공간을 걸어 다녀야 소리의 전체 모습이 들려요. 컷신 믹싱팀과 임펄스 응답(IR)을 공유해서 게임플레이와 컷신의 리버브가 끊김 없이 이어지게 했어요.</p>
+    <div class="take"><b>가져갈 것</b> · 리버브는 공간 하나가 아니라 공간의 흐름으로 설계해요. 그리고 같은 장소라면 게임플레이와 영상 파트가 같은 IR을 써야 플레이어가 전환을 눈치채지 못해요.</div>
+  </div>
+</section>
+
+<!-- ═══ Part 4 ═══ -->
+<div class="part-head" id="p-practice">
+  <span class="tag">Part 4 · 실전 세팅</span>
+  <h2>공간 리버브 잡는 법</h2>
+  <p>여기서부터는 여러분이 큐베이스나 미들웨어에서 직접 값을 정할 때 쓰는 내용이에요.</p>
+</div>
+
+<section class="sec" id="presets" data-part="practice">
+  <h3><span class="n">4.1</span>공간별 출발값</h3>
+  <p>아래 값은 정답이 아니라 출발점이에요. 일반적인 실내 음향 지식을 바탕으로 제가 정리한 참고 범위이고, 측정값이 아니에요. 여기서 시작해서 화면과 레퍼런스에 맞춰 귀로 조정하세요.</p>
+  <div class="tblw"><table>
+    <thead><tr><th>공간</th><th>RT60</th><th>프리딜레이</th><th>초기반사</th><th>고역</th><th>게임 장면 예</th></tr></thead>
+    <tbody>
+      <tr><td><b>차량 내부·옷장</b></td><td class="nw">0.1–0.3 s</td><td class="nw">0–3 ms</td><td>아주 가깝고 강함</td><td>어둡게</td><td>차 안 대화, 사물함 숨기</td></tr>
+      <tr><td><b>작은 방 (가구 있음)</b></td><td class="nw">0.3–0.6 s</td><td class="nw">3–10 ms</td><td>가깝고 촘촘함</td><td>약간 어둡게</td><td>침실, 사무실</td></tr>
+      <tr><td><b>콘크리트 복도·지하 주차장</b></td><td class="nw">1.0–2.0 s</td><td class="nw">8–20 ms</td><td>규칙적, 플러터</td><td>밝게</td><td>연구소, 벙커, 주차장 전투</td></tr>
+      <tr><td><b>계단실</b></td><td class="nw">1.5–3.0 s</td><td class="nw">10–25 ms</td><td>위아래로 반복</td><td>밝게</td><td>건물 탈출, 비상계단</td></tr>
+      <tr><td><b>대형 창고·체육관</b></td><td class="nw">2.0–4.0 s</td><td class="nw">20–40 ms</td><td>멀고 듬성듬성</td><td>중간</td><td>공장, 격납고 보스전</td></tr>
+      <tr><td><b>대성당·돔</b></td><td class="nw">4.0–8.0 s</td><td class="nw">30–60 ms</td><td>멀고 부드러움</td><td>점점 어둡게</td><td>신전, 왕좌의 방</td></tr>
+      <tr><td><b>동굴·하수도</b></td><td class="nw">1.5–5.0 s</td><td class="nw">10–40 ms</td><td>불규칙</td><td>젖은 곳은 밝게</td><td>던전, 지하수로</td></tr>
+      <tr><td><b>숲</b></td><td class="nw">0.2–0.8 s</td><td class="nw">0–10 ms</td><td>나무에 흩어짐</td><td>어둡게</td><td>오픈월드 숲 지대</td></tr>
+      <tr><td><b>개활지·평원</b></td><td class="nw">잔향 거의 없음</td><td class="nw">–</td><td>지면 반사 정도</td><td>거리 따라 감소</td><td>들판, 사막</td></tr>
+      <tr><td><b>협곡·도시 빌딩 사이</b></td><td class="nw">짧음 + 에코</td><td class="nw">에코 100 ms 이상</td><td>떨어진 메아리 몇 개</td><td>메아리일수록 어둡게</td><td>산악 저격, 시가전</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note tip"><b class="lb">실전 팁</b><p>리버브 리턴(FX 트랙)에 하이패스 필터를 넣어 저역을 정리하세요. 저역 잔향이 쌓이면 폭발음과 발소리가 같이 뭉개져요. 몇 Hz에서 자를지는 소리와 공간에 따라 다르니 귀로 정하세요.</p></div>
+</section>
+
+<section class="sec" id="per-sound" data-part="practice">
+  <h3><span class="n">4.2</span>소리 종류마다 보내는 양이 달라요</h3>
+  <p>같은 공간 안에서도 모든 소리를 같은 양으로 보내지 않아요.</p>
+  <dl class="dl">
+    <dt>플레이어 자신의 소리</dt><dd>발소리, 장비 소리는 리버브 양을 적게 보냅니다. 계속 들리는 소리라 리버브가 많으면 귀가 쉽게 피로해지고, 적의 소리를 가려요.</dd>
+    <dt>적·NPC 소리</dt><dd>공간 정보가 잘 들리게. 거리가 멀수록 Dry를 줄이고 Wet 비율을 올리면 멀게 들려요.</dd>
+    <dt>총성·폭발</dt><dd>본체는 Dry 위주, 공간 반응은 테일 레이어와 리버브로. (4.3)</dd>
+    <dt>대사</dt><dd>공간감은 주되 명료도가 먼저예요. TLOU2 팀도 소리를 가리면서 대사는 알아들을 수 있게 하는 걸 과제로 꼽았어요.</dd>
+    <dt>UI 소리</dt><dd>게임 세계 밖의 소리라서 보통 공간 리버브를 보내지 않아요.</dd>
+    <dt>음악</dt><dd>배경음악은 보통 공간 리버브를 거치지 않아요. 다만 게임 속 라디오처럼 세계 안에서 나는 음악은 공간에 넣어야 해요.</dd>
+  </dl>
+</section>
+
+<section class="sec" id="gun-tail" data-part="practice">
+  <h3><span class="n">4.3</span>총성 테일 설계</h3>
+  <p>총성은 공간 리버브를 공부하기에 가장 적합한 소리입니다. 한 발 안에 직접음, 반사, 잔향이 아주 분명하게 들리거든요. 실무에서 많이 쓰는 구조는 이래요.</p>
+  <ol>
+    <li><b>본체(Close)</b>: 총구 가까이의 펀치와 기계음. 공간과 상관없이 같게 둬요.</li>
+    <li><b>공간 반응(Tail)</b>: 실내, 실외, 터널, 숲처럼 환경별로 따로 만든 테일 레이어. 플레이어가 있는 공간에 맞춰 바꿔 재생해요.</li>
+    <li><b>리버브 버스</b>: 공간 리버브로 보내는 양. 테일 레이어와 겹치는 정도를 조절해요.</li>
+    <li><b>반사(선택)</b>: 레이캐스트 반사가 있는 엔진이면 가까운 벽의 슬랩을 추가로 얹어요.</li>
+  </ol>
+  <p>CoD: Modern Warfare가 소개한 리버브·슬랩 딜레이 시스템, 상황별 대기 레이어, 반사 시스템도 이 흐름과 같은 생각이에요. 테일을 따로 녹음하거나 만들 때는 같은 총을 실제로 다른 공간에서 녹음하는 게 가장 좋지만, 수업 과제에서는 본체 하나에 공간별 리버브와 딜레이로 테일을 만들어 보는 것부터 시작하세요.</p>
+</section>
+
+<section class="sec" id="transition" data-part="practice">
+  <h3><span class="n">4.4</span>공간 전환 · 걸어서 들어 보기</h3>
+  <p>발소리가 반복되는 동안 슬라이더를 움직여 콘크리트 복도에서 바깥 개활지로 걸어 나가 보세요. 먼저 <b>부드럽게</b>로 듣고, <b>딱 끊기</b>로 바꿔 같은 이동을 해 보면 전환 구간이 왜 필요한지 직접 확인할 수 있습니다.</p>
+  <div class="demo" id="walkDemo">
+    <div class="row">
+      <button class="btn primary" id="walkPlay">▶ 걷기 시작</button>
+      <span class="lbl">전환</span>
+      <button class="chip" data-mode="smooth" aria-pressed="true">부드럽게</button>
+      <button class="chip" data-mode="hard" aria-pressed="false">딱 끊기</button>
+    </div>
+    <div class="walk">
+      <span>복도</span>
+      <input id="walkPos" type="range" min="0" max="100" value="0" aria-label="플레이어 위치">
+      <span>개활지</span>
+    </div>
+    <div class="irinfo" id="walkInfo"><span>복도 리버브 <b>100%</b></span><span>야외 리버브 <b>0%</b></span></div>
+  </div>
+  <ul>
+    <li>전환은 시간이 아니라 위치에 따라 일어나야 해요. 문간에 멈춰 서면 소리도 그 중간 상태에 머물러야 해요. Wwise 포털이 깊이 방향으로 보간하는 것도 이 때문입니다.</li>
+    <li>문이 닫히고 열리는 것도 전환이에요. 닫힌 문은 오클루전, 열린 문은 포털로 생각하면 돼요.</li>
+    <li>동굴 입구나 건물 출입구처럼 플레이어가 자주 지나가는 곳은 직접 여러 번 왕복하며 들어 보세요.</li>
+  </ul>
+</section>
+
+<section class="sec" id="readability" data-part="practice">
+  <h3><span class="n">4.5</span>사실감보다 판독성</h3>
+  <p>리버브를 사실적으로 만들수록 좋은 게 아니에요. 아래 상황이면 사실과 달라도 줄이거나 바꿔요.</p>
+  <ul class="check">
+    <li>적 발소리의 방향이 리버브 때문에 흐려질 때</li>
+    <li>전투 중 소리가 많아져 리버브끼리 쌓여 뭉개질 때</li>
+    <li>중요한 대사나 힌트 소리가 공간에 묻힐 때</li>
+    <li>성당급 긴 잔향이 빠른 연사와 겹쳐 리듬이 안 들릴 때</li>
+  </ul>
+  <p>Overwatch의 "소리로 플레이하기", Hunt: Showdown의 "무엇·어디·어떤 상태", Gears of War 4의 "물리 데이터를 바탕으로 한 영화적 음향"은 모두 같은 원칙을 말하고 있습니다. 공간 리버브는 플레이어에게 도움이 되는 방향으로 설계해요.</p>
+</section>
+
+<section class="sec" id="budget" data-part="practice">
+  <h3><span class="n">4.6</span>성능 예산</h3>
+  <ul>
+    <li>리버브 인스턴스 수를 정해 두세요. 공간마다 버스를 공유하고, 동시에 켜지는 리버브 개수를 제한해요.</li>
+    <li>컨볼루션 리버브는 실제 공간 IR을 써서 사실적이지만, 알고리즘 리버브보다 대체로 무거워요. 긴 IR일수록 부하가 커요.</li>
+    <li>반사 계산은 레이 개수와 반사 차수가 부하를 결정해요. Wwise Reflect 사례에서도 차수를 올리면 표현은 늘고 부하도 늘어요.</li>
+    <li>모바일처럼 처리 부하에 민감한 플랫폼에서는 존 리버브 몇 개와 간단한 오클루전처럼 가벼운 구성부터 검토해 보세요.</li>
+  </ul>
+</section>
+
+<section class="sec" id="mistakes" data-part="practice">
+  <h3><span class="n">4.7</span>자주 하는 실수</h3>
+  <ul class="check">
+    <li>모든 소리를 같은 리버브, 같은 양으로 보낸다</li>
+    <li>Wet을 너무 많이 올려 방향감과 펀치가 사라진다</li>
+    <li>큰 공간인데 프리딜레이가 0ms라 원음과 리버브가 겹쳐 흐릿하게 들린다</li>
+    <li>리버브 리턴의 저역을 정리하지 않아 전체가 흐려진다</li>
+    <li>야외 장면에 실내 리버브를 걸어 야외처럼 안 들린다</li>
+    <li>공간 전환이 자연스럽지 않고 갑자기 바뀐다</li>
+    <li>화면 속 공간 재질과 리버브 색이 다르다 (타일 욕실인데 어두운 리버브)</li>
+    <li>리디자인 영상에서 카메라가 바뀌었는데 리버브는 그대로다</li>
+  </ul>
+</section>
+
+<!-- ═══ Part 5 ═══ -->
+<div class="part-head" id="p-lab">
+  <span class="tag">Part 5 · 실습 과제</span>
+  <h2>손으로 익히기</h2>
+  <p>읽기만 해서는 리버브를 다루는 감각을 익히기 어렵습니다. 아래 과제를 순서대로 해 보고, 결과물은 다음 피드백 시간에 가져오세요.</p>
+</div>
+
+<section class="sec" id="lab1" data-part="lab">
+  <h3><span class="n">5.1</span>과제 1 · 발소리 하나, 공간 다섯 개</h3>
+  <ol>
+    <li>발소리 한 세트(4~8걸음)를 만들거나 녹음합니다.</li>
+    <li>작은 방, 콘크리트 복도, 대형 창고, 동굴, 개활지 다섯 공간의 리버브를 4.1 출발값으로 세팅합니다.</li>
+    <li>같은 발소리를 각 공간으로 렌더링하고, 공간 이름을 가린 채 친구에게 들려줘서 맞히는지 확인합니다.</li>
+    <li>못 맞힌 공간은 무엇이 부족했는지(프리딜레이, 고역, 초기반사) 적어 옵니다.</li>
+  </ol>
+</section>
+
+<section class="sec" id="lab2" data-part="lab">
+  <h3><span class="n">5.2</span>과제 2 · 총성 테일 세 종류</h3>
+  <ol>
+    <li>총성 본체 하나를 만듭니다.</li>
+    <li>실내(창고), 실외(협곡), 터널 세 가지 테일 레이어를 만듭니다. 협곡은 리버브보다 딜레이로 메아리를 표현해 보세요.</li>
+    <li>본체 + 테일 조합 세 개를 나란히 들으며 본체는 같게 들리는지, 공간만 바뀌는지 확인합니다.</li>
+  </ol>
+</section>
+
+<section class="sec" id="lab3" data-part="lab">
+  <h3><span class="n">5.3</span>과제 3 · 리디자인 영상의 공간 지도</h3>
+  <ol>
+    <li>리디자인할 게임 플레이 영상에서 등장하는 공간을 모두 적습니다.</li>
+    <li>공간마다 재질, 크기, 예상 RT60, 프리딜레이를 표로 정리합니다.</li>
+    <li>공간이 바뀌는 지점(문, 입구, 컷 전환)의 타임코드를 적고, 전환 방식(부드럽게/즉시)을 정합니다.</li>
+    <li>이 표대로 큐베이스에서 공간별 FX 트랙을 만들고 Send로 작업합니다.</li>
+  </ol>
+  <div class="note tip"><b class="lb">큐베이스에서</b><p>공간마다 FX 트랙을 하나씩 만들어 이름을 공간 이름으로 붙이세요. 알고리즘 리버브(RoomWorks)와 컨볼루션 리버브(REVerence, Cubase Pro 포함)를 둘 다 써 보고 차이를 비교해 보면 좋아요. 공간 전환은 Send 양 오토메이션으로 그려요.</p></div>
+</section>
+
+<section class="sec" id="lab4" data-part="lab">
+  <h3><span class="n">5.4</span>과제 4 · 레퍼런스 분석</h3>
+  <p>이 페이지의 사례 게임 중 하나, 또는 여러분이 지원하고 싶은 회사의 게임을 골라 5분 플레이 영상을 분석합니다.</p>
+  <ul class="check">
+    <li>공간이 몇 개 나오고 각각 어떻게 들리는가</li>
+    <li>공간 전환은 부드러운가, 즉시 바뀌는가</li>
+    <li>벽 너머 소리, 모퉁이 너머 소리는 어떻게 처리했는가</li>
+    <li>총성·발소리에 초기반사가 들리는가</li>
+    <li>판독성을 위해 일부러 줄였다고 느끼는 부분이 있는가</li>
+  </ul>
+</section>
+
+<!-- ═══ 부록 ═══ -->
+<div class="part-head" id="p-ref">
+  <span class="tag">부록</span>
+  <h2>용어 사전과 출처</h2>
+  <p>면접이나 협업 때 정확한 용어를 쓰면 대화가 훨씬 빨라져요.</p>
+</div>
+
+<section class="sec gl" id="glossary" data-part="ref">
+  <h3><span class="n">G</span>용어 사전</h3>
+  <dl class="dl" id="glList">
+    <dt id="gl-direct">직접음 (Direct Sound)</dt><dd>음원에서 청자에게 반사 없이 곧장 오는 소리.</dd>
+    <dt id="gl-er">초기반사 (Early Reflections)</dt><dd>한두 번 반사되어 도착하는 개별 반사음. 공간 크기와 모양을 알려 줌.</dd>
+    <dt id="gl-late">잔향 (Late Reverberation)</dt><dd>수많은 반사가 섞여 방향 없이 남는 소리. 리버브 테일.</dd>
+    <dt id="gl-rt60">RT60</dt><dd>잔향이 60dB 줄어드는 데 걸리는 시간.</dd>
+    <dt id="gl-pre">프리딜레이 (Pre-delay)</dt><dd>직접음과 리버브 시작 사이의 간격.</dd>
+    <dt id="gl-damp">댐핑 (HF Damping)</dt><dd>잔향에서 고역이 저역보다 빨리 사라지게 하는 설정. 재질과 공기 흡수를 흉내 냄.</dd>
+    <dt id="gl-diff">확산 (Diffusion)</dt><dd>반사가 고르게 흩어지는 정도. 낮으면 반사가 하나하나 들림.</dd>
+    <dt id="gl-flutter">플러터 에코 (Flutter Echo)</dt><dd>평행한 두 면 사이에서 반사가 빠르게 반복되는 현상.</dd>
+    <dt id="gl-slap">슬랩 딜레이 (Slap Delay)</dt><dd>짧은 지연으로 한두 번 튀는 반사. 건물 벽에 맞고 돌아오는 총성 반사 표현에 씀.</dd>
+    <dt id="gl-ir">임펄스 응답 (IR)</dt><dd>공간에 아주 짧은 소리를 냈을 때 돌아오는 응답. 공간의 음향 지문.</dd>
+    <dt id="gl-conv">컨볼루션 리버브</dt><dd>실제 공간의 IR을 소리에 입혀 그 공간을 재현하는 리버브.</dd>
+    <dt id="gl-algo">알고리즘 리버브</dt><dd>딜레이와 필터 조합으로 잔향을 계산해 만드는 리버브. 파라미터 조절이 자유롭고 대체로 가벼움.</dd>
+    <dt id="gl-wetdry">Wet / Dry</dt><dd>Wet은 이펙트를 거친 소리, Dry는 원음.</dd>
+    <dt id="gl-aux">Aux Bus / Send</dt><dd>여러 소리가 공유하는 이펙트 버스와, 그 버스로 보내는 양.</dd>
+    <dt id="gl-zone">리버브 존 (Reverb Zone)</dt><dd>레벨에 지정한 구역. 들어가면 해당 리버브가 적용됨.</dd>
+    <dt id="gl-room">룸 (Room)</dt><dd>Wwise Spatial Audio의 음향 공간 단위. 리버브 버스를 가짐.</dd>
+    <dt id="gl-portal">포털 (Portal)</dt><dd>룸과 룸을 잇는 개구부. 소리와 리버브가 이곳을 통해 전달됨.</dd>
+    <dt id="gl-obst">옵스트럭션 (Obstruction)</dt><dd>직접음만 가려진 상태. 리버브는 그대로.</dd>
+    <dt id="gl-occ">오클루전 (Occlusion)</dt><dd>직접음과 리버브가 모두 가려진 상태. 벽 너머 소리.</dd>
+    <dt id="gl-diffr">회절 (Diffraction)</dt><dd>소리가 모서리나 개구부를 돌아 퍼지는 현상. 저역일수록 잘 돌아감.</dd>
+    <dt id="gl-trans">투과 (Transmission)</dt><dd>소리가 벽 같은 물체를 통과해 오는 것. 통과하면서 일부 주파수를 잃음.</dd>
+    <dt id="gl-prop">소리 전파 (Propagation)</dt><dd>소리가 공간을 따라 청자에게 도달하는 경로 전체를 계산하는 것.</dd>
+    <dt id="gl-ray">레이캐스트 (Raycast)</dt><dd>한 점에서 선을 쏴서 부딪히는 물체를 찾는 계산. 오클루전과 반사 계산에 씀.</dd>
+    <dt id="gl-bake">베이크 (Bake)</dt><dd>무거운 계산을 미리 해 두고 결과를 데이터로 저장하는 것.</dd>
+    <dt id="gl-rtpc">RTPC</dt><dd>Wwise에서 게임 값(거리, 오클루전 등)을 사운드 파라미터에 연결하는 기능.</dd>
+    <dt id="gl-snap">스냅샷 (Snapshot)</dt><dd>FMOD에서 믹스 상태를 저장하고 전환·혼합하는 기능.</dd>
+    <dt id="gl-tail">테일 (Tail)</dt><dd>소리 본체 뒤에 남는 꼬리. 총성에서는 공간별로 바꿔 쓰는 레이어를 가리키기도 함.</dd>
+    <dt id="gl-reflect">Wwise Reflect</dt><dd>지오메트리 기반으로 초기반사를 실시간 생성하는 Wwise 플러그인.</dd>
+    <dt id="gl-triton">Project Acoustics (Triton)</dt><dd>Microsoft의 사전 계산 파동 음향 기술. Gears of War 4 등에 적용.</dd>
+    <dt id="gl-steam">Steam Audio</dt><dd>Valve의 공간 음향 SDK. 반사, 경로, 오클루전, 투과, 컨볼루션 리버브 제공.</dd>
+  </dl>
+</section>
+
+<section class="sec src" id="sources" data-part="ref">
+  <h3><span class="n">S</span>참고한 자료</h3>
+  <p>게임 사례는 아래 자료를 바탕으로 정리했어요. 원문 표현을 그대로 옮기지 않고 제가 요약한 거라, 발표나 인터뷰 원문을 직접 보면 더 많은 걸 얻을 수 있어요.</p>
+  <ol>
+    <li><a href="https://www.gdcvault.com/play/1024008/" target="_blank" rel="noopener">GDC Vault · Gears of War 4, Project Triton: Pre-Computed Environmental Wave Acoustics</a></li>
+    <li><a href="https://developer.microsoft.com/en-us/games/blog/research-spotlight-project-acoustics/" target="_blank" rel="noopener">Microsoft Game Dev · Research Spotlight: Project Acoustics</a></li>
+    <li><a href="https://blog.activision.com/call-of-duty/2019-07/Modern-Warfare-Initial-Intel-Creating-an-Orchestra-of-Incredible-Audio-Effects-Weapon-Sounds-in-Call-of-Duty-Modern-Warfare" target="_blank" rel="noopener">Activision Blog · Modern Warfare 무기 사운드 (2019.07)</a></li>
+    <li><a href="https://80.lv/articles/learn-all-about-dynamic-audio-in-rainbow-six-siege" target="_blank" rel="noopener">80.lv · Dynamic Audio in Rainbow Six Siege (2017)</a></li>
+    <li><a href="https://steelseries.com/blog/sound-tricks-rainbow-six-siege-84" target="_blank" rel="noopener">SteelSeries · Sound tricks in Rainbow Six Siege</a></li>
+    <li><a href="https://blog.audiokinetic.com/overwatch-game-audio-using-wwise-part-2/" target="_blank" rel="noopener">Audiokinetic Blog · Overwatch Game Audio Using Wwise (Part 2)</a></li>
+    <li><a href="https://gdcvault.com/play/1023010/Overwatch-The-Elusive-Goal-Play" target="_blank" rel="noopener">GDC Vault · Overwatch: The Elusive Goal - Play by Sound (2016)</a></li>
+    <li><a href="https://asoundeffect.com/the-last-of-us-part-ii-sound/" target="_blank" rel="noopener">A Sound Effect · The Last of Us Part II 사운드 인터뷰</a></li>
+    <li><a href="https://www.huntshowdown.com/news/hunt-audio-readability-realism-and-consistency" target="_blank" rel="noopener">Hunt: Showdown · Readability, Realism and Consistency (2018.09)</a></li>
+    <li><a href="https://developer.valvesoftware.com/wiki/Env_sound_(GoldSrc)" target="_blank" rel="noopener">Valve Developer Community · env_sound (GoldSrc)</a></li>
+    <li><a href="https://en.wikipedia.org/wiki/Dark_Engine" target="_blank" rel="noopener">Wikipedia · Dark Engine</a></li>
+    <li><a href="https://audiokinetic.com/en/blog/rooms-and-portals-with-wwise-spatial-audio" target="_blank" rel="noopener">Audiokinetic Blog · Rooms and Portals in Wwise Spatial Audio</a></li>
+    <li><a href="https://dev.classmethod.jp/en/articles/cedec-2026-wwise/" target="_blank" rel="noopener">Classmethod · CEDEC 2026 Wwise 세션 정리 (Wwise Reflect)</a></li>
+    <li><a href="https://partner.steamgames.com/doc/features/steam_audio" target="_blank" rel="noopener">Steamworks · Steam Audio</a></li>
+    <li><a href="https://shazoo.ru/2020/05/29/94905/vajp-novaya-ekipirovka-i-steam-audio-escape-from-tarkov-poluchila-krupnyj-patch" target="_blank" rel="noopener">Shazoo · Escape from Tarkov Steam Audio 패치 (2020.05)</a></li>
+    <li><a href="https://insider-gaming.com/tarkov-patch-overhauls-immersive-audio/" target="_blank" rel="noopener">Insider Gaming · Tarkov 0.16.7 오디오 패치</a></li>
+  </ol>
+</section>
+
+  </main>
+</div>
+
+<footer class="banner">
+  <div class="banner-in">
+    <div class="irbars" id="irbars2" aria-hidden="true"></div>
+    <p class="foot-title">엠나인아카데미<br>수강생용 <span class="acc">학습자료</span></p>
+    <p class="sub">과제를 하다 막히는 부분은 다음 수업 때 화면에 열어 놓고 같이 봐요.</p>
+    <div class="meta"><span>게임 SFX 공간 리버브</span><span>2026.10.28 정리</span><span>수강생 내부 학습용</span><a href="#top" style="color:var(--band-ink)">↑ 맨 위로</a></div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  /* ── 배너 IR 막대 ── */
+  function bars(id){
+    var el=document.getElementById(id); if(!el) return; var h=''; var seed=7;
+    function rnd(){ seed=(seed*16807)%2147483647; return seed/2147483647; }
+    for(var i=0;i<56;i++){
+      var cls='', v;
+      if(i===0){cls='d';v=100;}
+      else if(i<3){v=0;}
+      else if(i<10){cls='e';v=35+rnd()*45;}
+      else {v=Math.max(2,62*Math.exp(-(i-10)/12)*(0.6+rnd()*0.5));}
+      h+='<i class="'+cls+'" style="height:'+v.toFixed(1)+'%"></i>';
+    }
+    el.innerHTML=h;
+  }
+  bars('irbars'); bars('irbars2');
+
+  /* ── 반사 지연 계산기 ── */
+  var dist=document.getElementById('dist'), dly=document.getElementById('dly'), vd=document.getElementById('verdict');
+  function calc(){
+    var d=parseFloat(dist.value); if(!(d>0)){dly.textContent='–';vd.textContent='거리를 입력하세요';return;}
+    var ms=2*d/343*1000; dly.textContent=ms<10?ms.toFixed(1):Math.round(ms);
+    vd.textContent = ms<35?'원음에 붙어 들려요 (공간감)': ms<100?'슬랩 에코로 들리기 시작해요':'따로 떨어진 메아리로 들려요';
+  }
+  dist.addEventListener('input',calc); calc();
+
+  /* ── 오디오 ── */
+  var ctx=null, master=null;
+  function ensure(){
+    if(!ctx){
+      var AC=window.AudioContext||window.webkitAudioContext; if(!AC) return null;
+      ctx=new AC();
+      var comp=ctx.createDynamicsCompressor(); comp.threshold.value=-10; comp.ratio.value=8;
+      master=ctx.createGain(); master.gain.value=0.7; master.connect(comp); comp.connect(ctx.destination);
+    }
+    if(ctx.state==='suspended') ctx.resume();
+    return ctx;
+  }
+
+  var ROOMS={
+    closet:{name:'옷장·차량 내부',rt:0.18,pre:1,er:[[2,.7],[3.4,.55],[4.8,.45],[6.5,.35],[8,.25]],aS:.45,aE:.12,tail:.5,lvl:.9,
+      desc:'반사가 아주 가깝고 촘촘해서 소리가 답답하게 붙어 들려요. 잔향은 거의 없어요.'},
+    room:{name:'작은 방',rt:0.45,pre:4,er:[[5,.6],[8,.45],[11,.42],[14,.3],[19,.22],[24,.15]],aS:.42,aE:.12,tail:.7,lvl:1,
+      desc:'가구와 패브릭이 고역을 먹어서 짧고 따뜻하게 남아요.'},
+    corridor:{name:'콘크리트 복도',rt:1.4,pre:8,er:[[9,.6],[18,.5],[27,.42],[36,.36],[45,.3],[54,.25],[63,.2],[72,.16]],aS:.8,aE:.35,tail:.85,lvl:1,
+      desc:'같은 간격으로 반복되는 반사(플러터)가 들려요. 콘크리트라 고역이 밝게 남아요.'},
+    stair:{name:'계단실',rt:2.2,pre:12,er:[[13,.5],[21,.45],[30,.4],[44,.32],[58,.28],[76,.22],[95,.18]],aS:.8,aE:.32,tail:.9,lvl:1,
+      desc:'위아래로 길게 이어진 공간이라 반사가 여러 층에서 겹쳐 길게 울려요.'},
+    hall:{name:'대형 창고',rt:3.0,pre:30,er:[[32,.45],[47,.4],[63,.35],[81,.3],[104,.25],[130,.2]],aS:.7,aE:.2,tail:1,lvl:1,
+      desc:'프리딜레이가 길어서 원음이 먼저 또렷하게 들리고, 그 뒤로 큰 공간이 따라와요.'},
+    cathedral:{name:'대성당',rt:5.5,pre:45,er:[[48,.4],[66,.36],[88,.32],[115,.28],[150,.24],[190,.2]],aS:.62,aE:.1,tail:1,lvl:1,
+      desc:'아주 긴 잔향이 점점 어두워지며 사라져요. 빠른 소리가 연속되면 서로 겹쳐서 뭉개져요.'},
+    cave:{name:'동굴',rt:3.2,pre:18,er:[[19,.5],[26,.42],[37,.45],[44,.3],[61,.35],[73,.25],[97,.22],[121,.15]],aS:.88,aE:.42,tail:.9,lvl:1,
+      desc:'불규칙한 벽이라 반사가 들쭉날쭉하고, 젖은 바위 때문에 고역이 오래 남아요.'},
+    forest:{name:'숲',rt:0.6,pre:3,er:[[4,.3],[7,.25],[11,.25],[16,.2],[23,.18],[31,.14],[42,.1]],aS:.35,aE:.08,tail:.45,lvl:.6,
+      desc:'나무와 잎에 반사가 잘게 흩어지고 고역이 빨리 사라져요. 짧고 부드러운 공간감이에요.'},
+    field:{name:'개활지',rt:0.3,pre:0,er:[[5,.35]],aS:.3,aE:.1,tail:.12,lvl:.35,
+      desc:'반사면이 없어서 잔향이 거의 없어요. 바닥 반사 정도만 남아요.'},
+    canyon:{name:'협곡',rt:0.5,pre:0,er:[[6,.3]],echo:[[190,.55],[330,.4],[540,.28],[790,.18]],aS:.4,aE:.15,tail:.12,lvl:.7,
+      desc:'잔향 대신 멀리 떨어진 절벽에서 돌아오는 메아리가 몇 번 들려요. 1.2의 반사 지연 계산을 떠올려 보세요.'}
+  };
+  var ORDER=['closet','room','corridor','stair','hall','cathedral','cave','forest','field','canyon'];
+
+  function irData(sr,p,ch){
+    var preS=p.pre/1000, erMax=0, echoMax=0;
+    p.er.forEach(function(e){erMax=Math.max(erMax,e[0]/1000);});
+    (p.echo||[]).forEach(function(e){echoMax=Math.max(echoMax,e[0]/1000);});
+    var len=Math.min(7, Math.max(preS+p.rt*1.15, echoMax+0.4, erMax+0.1)+0.05);
+    var n=Math.floor(len*sr), out=new Float32Array(n);
+    var seed=1234+ch*999; function rnd(){ seed=(seed*16807)%2147483647; return seed/2147483647*2-1; }
+    // 초기반사
+    p.er.forEach(function(e,i){
+      var t=Math.floor((e[0]*(1+(ch?0.06:-0.04)*((i%3)-1)))/1000*sr);
+      var s=(i%2?-1:1)*(ch&&i%3===0?-1:1);
+      for(var k=0;k<4;k++){ if(t+k<n) out[t+k]+=s*e[1]*(1-k*0.22); }
+    });
+    // 메아리(협곡): 짧게 번진 반사 다발, 점점 어두워짐
+    (p.echo||[]).forEach(function(e,i){
+      var t0=Math.floor((e[0]+(ch?7:0)+i*3)/1000*sr), w=Math.floor(0.012*sr), y=0, a=0.35-0.06*i;
+      for(var k=0;k<w;k++){ var x=rnd()*Math.exp(-k/(w*0.35)); y+=a*(x-y); if(t0+k<n) out[t0+k]+=y*e[1]*3.2; }
+    });
+    // 잔향 꼬리
+    var start=Math.floor(preS*sr), y=0, build=Math.floor(0.02*sr);
+    for(var i=start;i<n;i++){
+      var t=(i-start)/sr, env=Math.exp(-6.9078*t/p.rt);
+      if(env<0.0008) break;
+      var a=p.aS+(p.aE-p.aS)*Math.min(1,t/p.rt);
+      y+=a*(rnd()-y);
+      var ramp=(i-start)<build?(i-start)/build:1;
+      out[i]+=y*env*p.tail*ramp*1.6;
+    }
+    return out;
+  }
+  function normalize(arrs,lvl){
+    var e=0; arrs.forEach(function(a){for(var i=0;i<a.length;i++) e+=a[i]*a[i];});
+    var g=lvl/Math.sqrt(e/arrs.length+1e-9)*0.9;
+    arrs.forEach(function(a){for(var i=0;i<a.length;i++) a[i]*=g;});
+  }
+  var irCache={};
+  function getIR(key){
+    if(irCache[key]) return irCache[key];
+    var p=ROOMS[key], sr=ctx.sampleRate, L=irData(sr,p,0), R=irData(sr,p,1);
+    normalize([L,R],p.lvl);
+    var b=ctx.createBuffer(2,Math.max(L.length,R.length),sr);
+    b.copyToChannel?b.copyToChannel(L,0):b.getChannelData(0).set(L);
+    b.copyToChannel?b.copyToChannel(R,1):b.getChannelData(1).set(R);
+    irCache[key]=b; return b;
+  }
+
+  // 음원 합성
+  function makeSrc(kind){
+    var sr=ctx.sampleRate, len=Math.floor(sr*(kind==='metal'?1.2:0.45)), b=ctx.createBuffer(1,len,sr), d=b.getChannelData(0);
+    var seed=42; function rnd(){ seed=(seed*16807)%2147483647; return seed/2147483647*2-1; }
+    var i,t,y=0,y2=0;
+    if(kind==='step'){
+      for(i=0;i<len;i++){ t=i/sr;
+        var th=Math.sin(2*Math.PI*(90-40*t)*t)*Math.exp(-t/0.025)*0.9;
+        y+=0.18*(rnd()-y); var scuff=y*Math.exp(-Math.max(0,t-0.012)/0.03)*(t>0.012?1:0)*1.2;
+        y2+=0.6*(rnd()-y2); var click=(y2-y)*Math.exp(-t/0.006)*0.8;
+        d[i]=th+scuff+click; }
+    } else if(kind==='clap'){
+      var bursts=[0,0.009,0.017];
+      for(i=0;i<len;i++){ t=i/sr; var x=rnd(), s=0;
+        bursts.forEach(function(b0,j){ if(t>=b0) s+=Math.exp(-(t-b0)/(j===2?0.04:0.006)); });
+        y+=0.55*(x-y); d[i]=(x-y)*s*0.9; }
+    } else if(kind==='gun'){
+      for(i=0;i<len;i++){ t=i/sr; var x=rnd();
+        y+=0.35*(x-y);
+        var crack=x*Math.exp(-t/0.004);
+        var body=y*Math.exp(-t/0.06)*1.3;
+        var boom=Math.sin(2*Math.PI*(70-30*t)*t)*Math.exp(-t/0.09);
+        d[i]=Math.tanh((crack+body+boom)*1.4)*0.95; }
+    } else { // metal
+      var fr=[[420,1],[1137,.6],[2210,.4],[3450,.25]];
+      for(i=0;i<len;i++){ t=i/sr; var s2=0;
+        fr.forEach(function(f){ s2+=f[1]*Math.sin(2*Math.PI*f[0]*t)*Math.exp(-t/(0.5/(f[0]/420))); });
+        d[i]=s2*0.35*(t<0.002?t/0.002:1)+rnd()*Math.exp(-t/0.004)*0.4; }
+    }
+    return b;
+  }
+  var srcCache={};
+  function getSrc(k){ return srcCache[k]||(srcCache[k]=makeSrc(k)); }
+
+  /* ── 데모 1 ── */
+  var SRCS=[['step','발소리'],['clap','손뼉'],['gun','총성'],['metal','쇠파이프']];
+  var curSrc='step', curRoom='corridor', mode='both';
+  var srcChips=document.getElementById('srcChips'), roomChips=document.getElementById('roomChips');
+  srcChips.innerHTML=SRCS.map(function(s){return '<button class="chip" data-src="'+s[0]+'" aria-pressed="'+(s[0]===curSrc)+'">'+s[1]+'</button>';}).join('');
+  roomChips.innerHTML=ORDER.map(function(k){return '<button class="chip" data-room="'+k+'" aria-pressed="'+(k===curRoom)+'">'+ROOMS[k].name+'</button>';}).join('');
+  var wet=document.getElementById('wet'), wetOut=document.getElementById('wetOut');
+  wet.addEventListener('input',function(){wetOut.textContent=wet.value+'%';});
+  srcChips.addEventListener('click',function(e){var b=e.target.closest('[data-src]'); if(!b) return; curSrc=b.dataset.src; srcChips.querySelectorAll('.chip').forEach(function(c){c.setAttribute('aria-pressed',c===b);}); play();});
+  roomChips.addEventListener('click',function(e){var b=e.target.closest('[data-room]'); if(!b) return; curRoom=b.dataset.room; roomChips.querySelectorAll('.chip').forEach(function(c){c.setAttribute('aria-pressed',c===b);}); drawIR(); if(ctx) play();});
+  var bDry=document.getElementById('dryOnly'), bWet=document.getElementById('wetOnly');
+  function setMode(m){ mode=(mode===m)?'both':m; bDry.setAttribute('aria-pressed',mode==='dry'); bWet.setAttribute('aria-pressed',mode==='wet'); }
+  bDry.addEventListener('click',function(){setMode('dry');play();});
+  bWet.addEventListener('click',function(){setMode('wet');play();});
+  document.getElementById('play').addEventListener('click',play);
+  var live=[];
+  function play(){
+    if(!ensure()) return;
+    live.forEach(function(n){try{n.stop();}catch(e){}}); live=[];
+    var s=ctx.createBufferSource(); s.buffer=getSrc(curSrc);
+    var w=wet.value/100;
+    var dry=ctx.createGain(); dry.gain.value=mode==='wet'?0:(1-w*0.5);
+    var wg=ctx.createGain(); wg.gain.value=mode==='dry'?0:w*1.1;
+    var cv=ctx.createConvolver(); cv.normalize=false; cv.buffer=getIR(curRoom);
+    s.connect(dry); dry.connect(master); s.connect(cv); cv.connect(wg); wg.connect(master);
+    s.start(); live.push(s);
+  }
+
+  // IR 그래프 (공식으로 직접 계산해서 그림, 오디오 없이도 표시)
+  var cvs=document.getElementById('irCanvas'), info=document.getElementById('irInfo'), rdesc=document.getElementById('roomDesc');
+  function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim()||'#888'; }
+  function drawIR(){
+    var p=ROOMS[curRoom], sr=12000, L=irData(sr,p,0);
+    normalize([L],1);
+    var dpr=Math.min(2,window.devicePixelRatio||1), W=cvs.clientWidth||700, H=cvs.clientHeight||180;
+    cvs.width=W*dpr; cvs.height=H*dpr; var g=cvs.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0);
+    g.clearRect(0,0,W,H);
+    var padL=34,padR=10,padT=10,padB=22, pw=W-padL-padR, ph=H-padT-padB;
+    var dur=L.length/sr;
+    var erEnd=(p.pre/1000)+0.002; p.er.forEach(function(e){erEnd=Math.max(erEnd,e[0]/1000+0.002);});
+    var muted=css('--muted'), line=css('--line');
+    g.font='11px "JetBrains Mono", monospace'; g.fillStyle=muted; g.strokeStyle=line; g.lineWidth=1;
+    [0,-20,-40,-60].forEach(function(db){ var y=padT+ph*(-db/60); g.beginPath(); g.moveTo(padL,y); g.lineTo(W-padR,y); g.stroke(); g.fillText(db+'',2,y+4); });
+    var step=dur>3?1:dur>1.2?0.5:dur>0.5?0.1:0.05;
+    for(var tt=0;tt<=dur+1e-6;tt+=step){ var x=padL+pw*tt/dur; g.fillText(tt>=1||step>=0.5?tt.toFixed(1)+'s':Math.round(tt*1000)+'ms',Math.min(x,W-40),H-6); }
+    var peak=0; for(var i=0;i<L.length;i++) peak=Math.max(peak,Math.abs(L[i]));
+    var er=css('--er'), tl=css('--tail'), ink=css('--ink');
+    for(var px=0;px<pw;px++){
+      var a=Math.floor(px/pw*L.length), b=Math.floor((px+1)/pw*L.length), m=0;
+      for(var j=a;j<b&&j<L.length;j++) m=Math.max(m,Math.abs(L[j]));
+      if(m<=0) continue;
+      var db=20*Math.log10(m/peak); if(db<-60) continue;
+      var y=padT+ph*(-db/60), t=a/sr;
+      var isEcho=(p.echo||[]).some(function(e){return t>=e[0]/1000-0.002&&t<=e[0]/1000+0.03;});
+      g.fillStyle=(t<erEnd||isEcho)?er:tl;
+      g.fillRect(padL+px,y,1,padT+ph-y);
+    }
+    g.fillStyle=ink; g.fillRect(padL,padT,3,ph);
+    info.innerHTML='<span>RT60 <b>'+p.rt.toFixed(p.rt<1?2:1)+' s</b></span><span>프리딜레이 <b>'+p.pre+' ms</b></span><span>첫 반사 <b>'+p.er[0][0]+' ms</b></span>'+(p.echo?'<span>메아리 <b>'+p.echo.map(function(e){return e[0];}).join(' · ')+' ms</b></span>':'');
+    rdesc.textContent=p.desc;
+  }
+  drawIR();
+  var rt; window.addEventListener('resize',function(){clearTimeout(rt);rt=setTimeout(drawIR,150);});
+  if(window.matchMedia){ var mq=matchMedia('(prefers-color-scheme: dark)'); if(mq.addEventListener) mq.addEventListener('change',drawIR); }
+  new MutationObserver(drawIR).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+  /* ── 데모 2: 공간 전환 ── */
+  var walkBtn=document.getElementById('walkPlay'), pos=document.getElementById('walkPos'), winfo=document.getElementById('walkInfo');
+  var wmode='smooth', walking=false, timer=null, wA=null, wB=null, wNext=0, stepIdx=0;
+  document.querySelectorAll('[data-mode]').forEach(function(b){ b.addEventListener('click',function(){ wmode=b.dataset.mode; document.querySelectorAll('[data-mode]').forEach(function(c){c.setAttribute('aria-pressed',c===b);}); mix(); }); });
+  function mixVals(){ var x=pos.value/100, a,b;
+    if(wmode==='hard'){ a=x<0.5?1:0; b=1-a; } else { var k=Math.min(1,Math.max(0,(x-0.3)/0.4)); a=Math.cos(k*Math.PI/2); b=Math.sin(k*Math.PI/2); }
+    return [a,b]; }
+  function mix(){ var v=mixVals();
+    winfo.innerHTML='<span>복도 리버브 <b>'+Math.round(v[0]*100)+'%</b></span><span>야외 리버브 <b>'+Math.round(v[1]*100)+'%</b></span>'+(wmode==='smooth'?'<span>전환 구간 <b>30–70%</b></span>':'<span>경계 <b>50%</b></span>');
+    if(wA&&ctx){ var t=ctx.currentTime; wA.gain.setTargetAtTime(v[0]*0.8,t,0.04); wB.gain.setTargetAtTime(v[1]*0.8,t,0.04); }
+  }
+  pos.addEventListener('input',mix); mix();
+  var cvA,cvB;
+  function startWalk(){
+    if(!ensure()) return;
+    cvA=ctx.createConvolver(); cvA.normalize=false; cvA.buffer=getIR('corridor');
+    cvB=ctx.createConvolver(); cvB.normalize=false; cvB.buffer=getIR('field');
+    wA=ctx.createGain(); wB=ctx.createGain(); cvA.connect(wA); cvB.connect(wB); wA.connect(master); wB.connect(master);
+    mix(); walking=true; walkBtn.textContent='■ 멈추기'; wNext=ctx.currentTime+0.05; stepIdx=0;
+    timer=setInterval(sched,60);
+  }
+  function sched(){
+    while(wNext<ctx.currentTime+0.2){
+      var s=ctx.createBufferSource(); s.buffer=getSrc('step'); s.playbackRate.value=stepIdx%2?0.94:1.03;
+      var d=ctx.createGain(); d.gain.value=0.75;
+      s.connect(d); d.connect(master); s.connect(cvA); s.connect(cvB); s.start(wNext);
+      wNext+=0.52; stepIdx++;
+    }
+  }
+  function stopWalk(){ walking=false; clearInterval(timer); walkBtn.textContent='▶ 걷기 시작';
+    if(wA){ var t=ctx.currentTime; wA.gain.setTargetAtTime(0,t,0.3); wB.gain.setTargetAtTime(0,t,0.3); var a=wA,b=wB; setTimeout(function(){try{a.disconnect();b.disconnect();}catch(e){}},2500); wA=wB=null; } }
+  walkBtn.addEventListener('click',function(){ walking?stopWalk():startWalk(); });
+  document.addEventListener('visibilitychange',function(){ if(document.hidden&&walking) stopWalk(); });
+
+  /* ── 목차 ── */
+  var toc=document.getElementById('toc');
+  var PART={start:'Part 0 · 시작하기',base:'Part 1 · 공간 음향 기초',game:'Part 2 · 게임 리버브 구현',cases:'Part 3 · 게임 사례',practice:'Part 4 · 실전 세팅',lab:'Part 5 · 실습 과제',ref:'부록'};
+  var PANCH={start:'p-start',base:'p-base',game:'p-game',cases:'p-cases',practice:'p-practice',lab:'p-lab',ref:'p-ref'};
+  var secs=Array.prototype.slice.call(document.querySelectorAll('main .sec'));
+  function esc(t){return String(t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  var last=null, html='';
+  secs.forEach(function(sec){
+    var p=sec.dataset.part;
+    if(p!==last){ html+='<li class="part"><a href="#'+PANCH[p]+'">'+PART[p]+'</a></li>'; last=p; }
+    var h=sec.querySelector('h3'), n=h.querySelector('.n').textContent, t=h.cloneNode(true);
+    t.querySelectorAll('.n,.yr,.unsure,.guess').forEach(function(x){x.remove();});
+    sec.dataset.title=t.textContent.trim();
+    html+='<li><a href="#'+sec.id+'" data-id="'+sec.id+'"><span class="n">'+esc(n)+'</span><span>'+esc(sec.dataset.title)+'</span></a></li>';
+  });
+  toc.innerHTML=html;
+
+  var side=document.getElementById('side'), ov=document.getElementById('overlay'), ob=document.getElementById('openSide');
+  function openSide(){side.classList.add('open');ov.classList.add('open');ob.setAttribute('aria-expanded','true');setTimeout(function(){q.focus();},50);}
+  function closeSide(){side.classList.remove('open');ov.classList.remove('open');ob.setAttribute('aria-expanded','false');}
+  ob.addEventListener('click',openSide); ov.addEventListener('click',closeSide);
+  document.getElementById('closeSide').addEventListener('click',closeSide);
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')closeSide();});
+  toc.addEventListener('click',function(e){if(e.target.closest('a'))closeSide();});
+
+  /* ── 검색 ── */
+  var q=document.getElementById('q'), res=document.getElementById('results'), clr=document.getElementById('clr');
+  var IDX=[];
+  function txt(el){ var out=[], w=document.createTreeWalker(el,NodeFilter.SHOW_TEXT,null), n;
+    while((n=w.nextNode())){ if(n.parentNode.closest('h3,script,canvas')) continue; var v=n.nodeValue.trim(); if(v) out.push(v); }
+    return out.join(' ').replace(/\s+/g,' '); }
+  secs.forEach(function(sec){ if(sec.id==='glossary') return; IDX.push({id:sec.id,title:sec.dataset.title,num:sec.querySelector('h3 .n').textContent,part:sec.dataset.part,text:txt(sec)}); });
+  document.querySelectorAll('#glList dt').forEach(function(dt){ var dd=dt.nextElementSibling; IDX.push({id:dt.id,title:dt.textContent,num:'용어',part:'ref',text:dt.textContent+' '+(dd?dd.textContent:''),gl:true}); });
+  function norm(t){return String(t).toLowerCase().replace(/\s+/g,'');}
+  function hl(text,query){ var t=esc(text); query.trim().split(/\s+/).filter(Boolean).forEach(function(w){ var re=new RegExp('('+w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig'); t=t.replace(re,'<mark>$1</mark>'); }); return t; }
+  function snip(text,query){ var w=query.trim().split(/\s+/)[0].toLowerCase(), i=text.toLowerCase().indexOf(w); if(i<0) return text.slice(0,80)+'…'; var a=Math.max(0,i-30); return (a>0?'…':'')+text.slice(a,i+60)+'…'; }
+  var PL={start:'시작',base:'기초',game:'구현',cases:'사례',practice:'실전',lab:'실습',ref:'부록'};
+  function search(){
+    var raw=q.value, nq=norm(raw); clr.hidden=!raw;
+    if(!nq){res.hidden=true;toc.hidden=false;return;}
+    var words=raw.trim().toLowerCase().split(/\s+/).map(norm);
+    var hits=IDX.filter(function(e){var n=norm(e.text+' '+e.title);return words.every(function(w){return n.indexOf(w)>=0;});});
+    hits.sort(function(a,b){var at=norm(a.title).indexOf(nq)>=0?0:1, bt=norm(b.title).indexOf(nq)>=0?0:1; if(at!==bt) return at-bt; return (a.gl?1:0)-(b.gl?1:0);});
+    var h='<div class="cnt">“'+esc(raw.trim())+'” 검색 결과 '+hits.length+'건</div>';
+    if(!hits.length) h+='<div class="empty">찾는 내용이 없어요. 영문 용어나 게임 이름으로도 검색해 보세요.</div>';
+    hits.slice(0,40).forEach(function(e){
+      h+='<button class="res" data-go="'+e.id+'"><div class="rt"><span class="rp">'+(e.gl?'용어':PL[e.part]+' '+esc(e.num))+'</span>'+hl(e.title,raw)+'</div><div class="rs">'+hl(snip(e.text,raw),raw)+'</div></button>';
+    });
+    res.innerHTML=h; res.hidden=false; toc.hidden=true;
+  }
+  var tm; q.addEventListener('input',function(){clearTimeout(tm);tm=setTimeout(search,120);});
+  clr.addEventListener('click',function(){q.value='';search();q.focus();});
+  res.addEventListener('click',function(e){ var b=e.target.closest('[data-go]'); if(!b) return; var el=document.getElementById(b.dataset.go); if(!el) return;
+    closeSide(); el.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:el.tagName==='DT'?'center':'start'});
+    el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); });
+
+  /* ── 현재 위치 ── */
+  var links={}; toc.querySelectorAll('a[data-id]').forEach(function(a){links[a.dataset.id]=a;});
+  var mt=document.getElementById('mbarTitle');
+  if('IntersectionObserver' in window){
+    var io=new IntersectionObserver(function(ents){ ents.forEach(function(en){ if(en.isIntersecting){ var id=en.target.id; Object.keys(links).forEach(function(k){links[k].classList.toggle('on',k===id);}); mt.textContent=en.target.querySelector('h3 .n').textContent+' '+en.target.dataset.title; } }); },{rootMargin:'-15% 0px -75% 0px'});
+    secs.forEach(function(s){io.observe(s);});
+  }
+  if(location.hash){ var tg=document.getElementById(location.hash.slice(1)); if(tg) setTimeout(function(){tg.scrollIntoView();},60); }
+})();
+</script>
+
+</body>
+</html>
